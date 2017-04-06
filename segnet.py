@@ -1,50 +1,244 @@
-import os
-#os.environ['KERAS_BACKEND'] = 'theano'
-#os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
-
-from keras.backend import set_image_dim_ordering
-set_image_dim_ordering('tf')
-
+from typing import Tuple, List, Text
+import time
 import sys
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/")
 import cv2
-
-import time
 import numpy as np
 np.random.seed(1337) # for reproducibility
+import os
+os.environ['KERAS_BACKEND'] = 'theano'
+os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
+# os.environ['KERAS_BACKEND'] = 'tensorflow'
 
-import keras.models as models
-from keras.layers.noise import GaussianNoise
-from keras.layers.core import Activation, Reshape, Permute, Lambda
-from keras.layers.convolutional import Conv2D, UpSampling2D, ZeroPadding2D
+import keras
+# keras.backend.backend()
+# keras.backend.set_epsilon(1e-07)
+# keras.backend.epsilon()
+# keras.backend.set_floatx('float32')
+# keras.backend.floatx()
+keras.backend.set_image_data_format('channels_first') # theano
+# keras.backend.image_data_format()
+
+from keras.applications.vgg16 import VGG16
+from keras.layers import Input, Flatten
 from keras.layers.pooling import MaxPooling2D
+from keras.models import Sequential, Model
+from keras.layers.convolutional import Conv2D, UpSampling2D, ZeroPadding2D
 from keras.layers.normalization import BatchNormalization
+from keras.layers import Activation
 from keras.optimizers import SGD
+from keras.preprocessing.image import ImageDataGenerator
+
+class DePool2D(UpSampling2D):
+    '''
+    https://github.com/nanopony/keras-convautoencoder/blob/c8172766f968c8afc81382b5e24fd4b57d8ebe71/autoencoder_layers.py#L24
+    Simplar to UpSample, yet traverse only maxpooled elements
+    # Input shape
+        4D tensor with shape:
+        `(samples, channels, rows, cols)` if dim_ordering='th'
+        or 4D tensor with shape:
+        `(samples, rows, cols, channels)` if dim_ordering='tf'.
+    # Output shape
+        4D tensor with shape:
+        `(samples, channels, upsampled_rows, upsampled_cols)` if dim_ordering='th'
+        or 4D tensor with shape:
+        `(samples, upsampled_rows, upsampled_cols, channels)` if dim_ordering='tf'.
+    # Arguments
+        size: tuple of 2 integers. The upsampling factors for rows and columns.
+        dim_ordering: 'th' or 'tf'.
+            In 'th' mode, the channels dimension (the depth)
+            is at index 1, in 'tf' mode is it at index 3.
+    '''
+
+    def __init__(self, pool2d_layer, *args, **kwargs):
+        self._pool2d_layer = pool2d_layer
+        super().__init__(*args, **kwargs)
+
+    def get_output(self, train=False):
+        X = self.get_input(train)
+        if self.dim_ordering == 'th':
+            output = keras.backend.repeat_elements(X, self.size[0], axis=2)
+            output = keras.backend.repeat_elements(output, self.size[1], axis=3)
+        elif self.dim_ordering == 'tf':
+            output = keras.backend.repeat_elements(X, self.size[0], axis=1)
+            output = keras.backend.repeat_elements(output, self.size[1], axis=2)
+        else:
+            raise Exception('Invalid dim_ordering: ' + self.dim_ordering)
+
+        f = keras.backend.gradients(
+            keras.backend.sum(
+                self._pool2d_layer.get_output(train)
+            ),
+            self._pool2d_layer.get_input(train)
+        ) * output
+
+        return f
+
+def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
+    # input_shape: (include_top is False のときのみ) 
+    # ex. (3, 224, 244) or (224, 224, 3)
+    # 正確に3つの入力チャンネルを持つ必要があり、幅と高さは48以上でなければなりません。
+    input_tensor = Input(shape=shape) # type: object
+    encoder = VGG16(
+        include_top=False, 
+        weights='imagenet', 
+        input_tensor=input_tensor,
+        input_shape=shape,
+        pooling="None" ) # type: keras.engine.training.Model
+    encoder.summary()
+
+    L = [layer for i, layer in enumerate(encoder.layers) ] # type: Tuple[Int, keras.engine.topology.Layer]
+    L.reverse()
+
+    decoder = Sequential(layers=[
+        # Block 5
+        DePool2D(L[0], size=L[0].pool_size, input_shape=encoder.output_shape[1:]),
+        Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding), BatchNormalization(), Activation('relu'),
+        # Block 4
+        DePool2D(L[4], size=L[4].pool_size),
+        Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding), BatchNormalization(), Activation('relu'),
+        # Block 3
+        DePool2D(L[8], size=L[8].pool_size),
+        Conv2D(L[ 9].filters, L[ 9].kernel_size, padding=L[ 9].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding), BatchNormalization(), Activation('relu'),
+        # Block 2
+        DePool2D(L[12], size=L[12].pool_size),
+        Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding), BatchNormalization(), Activation('relu'),
+        # Block 1
+        DePool2D(L[15], size=L[15].pool_size),
+        Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding), BatchNormalization(), Activation('relu'),
+
+        Activation("softmax")
+    ])
+    decoder.summary()
+
+    segnet = Model(
+        inputs=encoder.inputs,
+        outputs=decoder(encoder.outputs) ) # type: keras.engine.training.Model
+    sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
+    segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
+    segnet.summary()
+
+    return segnet
+    
+def train(model: keras.engine.training.Model):
+
+    # we create two instances with the same arguments
+    data_gen_args = dict(featurewise_center=True,
+                        featurewise_std_normalization=True,
+                        rotation_range=90.,
+                        width_shift_range=0.1,
+                        height_shift_range=0.1,
+                        zoom_range=0.2)
+    image_datagen = ImageDataGenerator(**data_gen_args)
+    mask_datagen = ImageDataGenerator(**data_gen_args)
+
+    # Provide the same seed and keyword arguments to the fit and flow methods
+    seed = 1
+    #image_datagen.fit(images, augment=True, seed=seed)
+    #mask_datagen.fit(masks, augment=True, seed=seed)
+
+    image_generator = image_datagen.flow_from_directory(
+        'data/images',
+        class_mode=None,
+        target_size=(img_rows, img_cols),
+        batch_size=8,
+        shuffle=False,
+        seed=seed)
+
+    mask_generator = mask_datagen.flow_from_directory(
+        'data/masks',
+        class_mode=None,
+        target_size=(label_rows, label_cols),
+        batch_size=8,
+        shuffle=False,
+        color_mode='grayscale',
+        seed=seed)
+
+    # combine generators into one which yields image and masks
+    train_generator = zip(image_generator, mask_generator)
+
+    CLASS_WEIGHTING = [0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
+
+    history = model.fit_generator(
+        train_generator,
+        steps_per_epoch=2000,
+        epochs=50,
+        show_accuracy=True,
+        verbose=1,
+        class_weight=CLASS_WEIGHTING
+    )
+    segnet.save_weights('model_weight.hdf5')
 
 
-Sky = [128,128,128]
-Building = [128,0,0]
-Pole = [192,192,128]
-Road_marking = [255,69,0]
-Road = [128,64,128]
-Pavement = [60,40,222]
-Tree = [128,128,0]
-SignSymbol = [192,128,128]
-Fence = [64,64,128]
-Car = [64,0,128]
-Pedestrian = [64,64,0]
-Bicyclist = [0,128,192]
-Unlabelled = [0,0,0]
 
-label_colours = np.array([
-  Sky, Building, Pole, Road, Pavement,
-  Tree, SignSymbol, Fence, Car, Pedestrian, Bicyclist,
-  Unlabelled])
 
-def visualize(temp):
+if __name__ == '__main__':
+    segnet = create_segnet(3, 360, 480)
+    train(segnet)
+    '''
+    start = time.time()
+    segnet.load_weights('segnet/model_weight_ep100.hdf5')
+    end = time.time()
+    print('%30s' % 'load_weights in ', str((end - start)*1000), 'ms')
+    '''
+
+
+exit()
+
+def predict(model: keras.engine.training.Model):
+    start = time.time()
+    frame = np.rollaxis(normalized(cv2.imread("SegNet-Tutorial/CamVid/test/Seq05VD_f02370.png")))
+    end = time.time()
+    print('%30s' % 'imread in ', str((end - start)*1000), 'ms')
+
+    start = time.time()
+    output = model.predict_proba(frame)
+    end = time.time()
+    print('%30s' % 'predict_proba in ', str((end - start)*1000), 'ms')
+
+    start = time.time()
+    pred = visualize(np.argmax(output[0],axis=1).reshape((360,480)))
+    cv2.imwrite("output.png", pred)
+    end = time.time()
+    print('%30s' % 'imwrite in ', str((end - start)*1000), 'ms')
+
+
+def create_label_colors() -> np.ndarray:
+    Sky = [128,128,128]
+    Building = [128,0,0]
+    Pole = [192,192,128]
+    Road_marking = [255,69,0]
+    Road = [128,64,128]
+    Pavement = [60,40,222]
+    Tree = [128,128,0]
+    SignSymbol = [192,128,128]
+    Fence = [64,64,128]
+    Car = [64,0,128]
+    Pedestrian = [64,64,0]
+    Bicyclist = [0,128,192]
+    Unlabelled = [0,0,0]
+
+    label_colours = np.array([
+        Sky, Building, Pole, Road, Pavement,
+        Tree, SignSymbol, Fence, Car, Pedestrian, Bicyclist,
+        Unlabelled
+    ])
+    return label_colours
+
+def visualize(temp: np.ndarray) -> np.ndarray:
     r = temp.copy()
     g = temp.copy()
     b = temp.copy()
+    label_colours = create_label_colors()
+
     for l in range(0,11):
         r[temp==l]=label_colours[l,0]
         g[temp==l]=label_colours[l,1]
@@ -56,10 +250,7 @@ def visualize(temp):
     rgb[:,:,2] = (b/255.0)#[:,:,2]
     return rgb
 
-def normalized(rgb):
-    '''
-    equalizeHist
-    '''
+def normalized(rgb: np.ndarray) -> np.ndarray:
     #return rgb/255.0
     norm=np.zeros((rgb.shape[0], rgb.shape[1], 3),np.float32)
 
@@ -73,20 +264,24 @@ def normalized(rgb):
 
     return norm
 
-def binarylab(labels):
+def binarylab(labels: np.ndarray) -> np.ndarray:
     x = np.zeros([360,480,12])
     for i in range(360):
         for j in range(480):
             x[i,j,labels[i][j]]=1
     return x
 
-def prep_data():
+def prep_data()-> Tuple[np.ndarray, np.ndarray] :
+    '''
+    train_data, train_label = prep_data()
+    train_label = np.reshape(train_label, (367, 360*480, 12))
+    '''
+    PATH = './SegNet-Tutorial/CamVid/'
     train_data = []
     train_label = []
-    txt = ""
+    txt = [] # type: List[Tuple[Text, Text]]
     with open(os.path.join(PATH, 'train.txt')) as f:
-        txt = f.readlines()
-        txt = [line.split(' ') for line in txt]
+        txt = [line.split(' ') for line in f.readlines()]
     print(txt)
     for i in range(len(txt)):
         data, label = txt[i]
@@ -98,125 +293,8 @@ def prep_data():
         print('.',end='')
     return np.array(train_data), np.array(train_label)
 
-def create_encoding_layers():
-    return [
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(64, (3, 3), padding='valid'),
-        BatchNormalization(),
-        Activation('relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(128, (3, 3), padding='valid'),
-        BatchNormalization(),
-        Activation('relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(256, (3, 3), padding='valid'),
-        BatchNormalization(),
-        Activation('relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(512, (3, 3), padding='valid'),
-        BatchNormalization(),
-        Activation('relu'),
-        #MaxPooling2D(pool_size=(2, 2),
-    ]
-
-def create_decoding_layers():
-    pool_size = 2
-    return[
-        #UpSampling2D(size=(pool_size,pool_size)),
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(512, (3, 3), padding='valid'),
-        BatchNormalization(),
-
-        UpSampling2D(size=(pool_size,pool_size)),
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(256, (3, 3), padding='valid'),
-        BatchNormalization(),
-
-        UpSampling2D(size=(pool_size,pool_size)),
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(128, (3, 3), padding='valid'),
-        BatchNormalization(),
-
-        UpSampling2D(size=(pool_size,pool_size)),
-        ZeroPadding2D(padding=(1, 1)),
-        Conv2D(64, (3, 3), padding='valid'),
-        BatchNormalization(),
-    ]
-
-def create_segnet(channels, height, width):
-    segnet = models.Sequential()
-
-    # Add a noise layer to get a denoising segnet. This helps avoid overfitting
-    segnet.add(Lambda(lambda x: x + 0, input_shape=(height, width, channels) ))
-
-    #segnet.add(GaussianNoise(sigma=0.3))
-    
-    for l in create_encoding_layers(): segnet.add(l)
-    for l in create_decoding_layers(): segnet.add(l)
 
 
-    segnet.add(Conv2D(12, (1, 1), padding='valid',))
-    segnet.add(Reshape((12, height*width)))
-    segnet.add(Permute((2, 1)))
-    segnet.add(Activation('softmax'))
-
-    return segnet
 
 
-PATH = './SegNet-Tutorial/CamVid/'
 
-CLASS_WEIGHTING = [0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
-NB_EPOCH = 100
-BATCH_SIZE = 14
-
-if __name__ == '__main__':
-    train_data, train_label = prep_data()
-    #train_label = np.reshape(train_label, (367, 360*480, 12))
-
-    segnet = create_segnet(3, 360, 480)
-    segnet.summary()
-
-    #optimizer = SGD(lr=0.01, momentum=0.8, decay=0., nesterov=False)
-    segnet.compile(loss="categorical_crossentropy", optimizer='adadelta')
-
-    '''
-    history = segnet.fit(
-      train_data,
-      train_label,
-      batch_size=BATCH_SIZE,
-      nb_epoch=NB_EPOCH,
-      show_accuracy=True,
-      verbose=1,
-      class_weight=CLASS_WEIGHTING
-      # validation_data=(X_test, X_test),
-    )
-    segnet.save_weights('model_weight_ep100.hdf5')
-    '''
-    
-    start = time.time()
-    segnet.load_weights('segnet/model_weight_ep100.hdf5')
-    end = time.time()
-    print('%30s' % 'load_weights in ', str((end - start)*1000), 'ms')
-
-
-    start = time.time()
-    frame = np.rollaxis(normalized(cv2.imread("SegNet-Tutorial/CamVid/test/Seq05VD_f02370.png")))
-    end = time.time()
-    print('%30s' % 'imread in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    output = segnet.predict_proba(frame)
-    end = time.time()
-    print('%30s' % 'predict_proba in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    pred = visualize(np.argmax(output[0],axis=1).reshape((360,480)), False)
-    cv2.imwrite("output.png", pred)
-    end = time.time()
-    print('%30s' % 'imwrite in ', str((end - start)*1000), 'ms')

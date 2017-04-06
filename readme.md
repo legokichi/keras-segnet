@@ -1,5 +1,17 @@
-working on progress
+working in progress
 
-forked from https://github.com/pradyu1993/segnet/
+* https://github.com/pradyu1993/segnet/
+* https://github.com/pradyu1993/segnet/issues/10
+* https://github.com/imlab-uiip/keras-segnet
+* https://github.com/yandex/segnet-torch
+* https://gist.github.com/rdelassus/5b908efd07ae030a2650584e199ff25b/
 
-ref: https://github.com/imlab-uiip/keras-segnet
+
+```
+pyenv shell anaconda3-4.1.1
+pip install theano
+pip install keras
+pip install mypy
+
+mypy segnet.py --ignore-missing-imports
+```
