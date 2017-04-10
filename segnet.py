@@ -156,6 +156,7 @@ def train(model: keras.engine.training.Model):
         shuffle=False,
         seed=seed)
 
+    # mask は RGBA だと (x,x,x,255) x<=0<12 になってる
     mask_generator = mask_datagen.flow_from_directory(
         'SegNet-Tutorial/CamVid/trainannot',
         class_mode=None,
@@ -163,7 +164,7 @@ def train(model: keras.engine.training.Model):
         target_size=(img_rows, img_cols),
         batch_size=8,
         shuffle=False,
-        #color_mode='grayscale',
+        color_mode='grayscale',
         seed=seed)
 
     # combine generators into one which yields image and masks
