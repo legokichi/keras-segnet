@@ -21,6 +21,7 @@ keras.backend.set_image_data_format('channels_first') # theano
 
 from keras.applications.vgg16 import VGG16
 from keras.layers import Input, Flatten
+from keras.layers.core import Dense, Reshape, Permute
 from keras.layers.pooling import MaxPooling2D
 from keras.models import Sequential, Model
 from keras.layers.convolutional import Conv2D, UpSampling2D, ZeroPadding2D
@@ -74,7 +75,7 @@ class DePool2D(UpSampling2D):
 
         return f
 
-def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
+def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     # input_shape: (include_top is False のときのみ) 
     # ex. (3, 224, 244) or (224, 224, 3)
     # 正確に3つの入力チャンネルを持つ必要があり、幅と高さは48以上でなければなりません。
@@ -104,7 +105,7 @@ def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
         Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 3
         DePool2D(L[8], size=L[8].pool_size),
-        Conv2D(L[ 9].filters, L[ 9].kernel_size, padding=L[ 9].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        ZeroPadding2D(padding=(0, 1)),
         Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 2
@@ -116,7 +117,9 @@ def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
         Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
 
-        Activation("softmax")
+
+        Conv2D(12, (1, 1), padding='valid',),
+        Activation('softmax'),
     ])
     decoder.summary()
 
@@ -125,8 +128,7 @@ def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
         outputs=decoder(encoder.outputs) ) # type: keras.engine.training.Model
     sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
     segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
-    segnet.summary()
-
+    #segnet.summary()
     return segnet
     
 def train(model: keras.engine.training.Model):
@@ -150,6 +152,7 @@ def train(model: keras.engine.training.Model):
     img_cols = 360
     image_generator = image_datagen.flow_from_directory(
         'SegNet-Tutorial/CamVid/train',
+        classes=[],
         class_mode=None,
         target_size=(img_rows, img_cols),
         batch_size=8,
@@ -159,6 +162,7 @@ def train(model: keras.engine.training.Model):
     mask_generator = mask_datagen.flow_from_directory(
         'SegNet-Tutorial/CamVid/trainannot',
         class_mode=None,
+        classes=[],
         target_size=(img_rows, img_cols),
         batch_size=8,
         shuffle=False,
@@ -170,6 +174,9 @@ def train(model: keras.engine.training.Model):
 
     CLASS_WEIGHTING = [0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
 
+    segnet.save_weights('model_weight.hdf5')
+    print("start")
+
     history = model.fit_generator(
         train_generator,
         steps_per_epoch=2000,
@@ -177,13 +184,12 @@ def train(model: keras.engine.training.Model):
         verbose=1,
         class_weight=CLASS_WEIGHTING
     )
-    segnet.save_weights('model_weight.hdf5')
 
 
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((3, 360, 480))
+    segnet = create_segnet((3, 480, 360))
     train(segnet)
     '''
     start = time.time()
