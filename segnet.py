@@ -1,4 +1,4 @@
-from typing import Tuple, List, Text
+from typing import Tuple, List, Text, Dict, Any
 import time
 import sys
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/")
@@ -132,12 +132,13 @@ def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
 def train(model: keras.engine.training.Model):
 
     # we create two instances with the same arguments
-    data_gen_args = dict(featurewise_center=True,
+    data_gen_args = dict(
+                        featurewise_center=True,
                         featurewise_std_normalization=True,
                         rotation_range=90.,
                         width_shift_range=0.1,
                         height_shift_range=0.1,
-                        zoom_range=0.2)
+                        zoom_range=0.2) # type: dict
     image_datagen = ImageDataGenerator(**data_gen_args)
     mask_datagen = ImageDataGenerator(**data_gen_args)
 
@@ -173,7 +174,6 @@ def train(model: keras.engine.training.Model):
         train_generator,
         steps_per_epoch=2000,
         epochs=50,
-        show_accuracy=True,
         verbose=1,
         class_weight=CLASS_WEIGHTING
     )

@@ -9,7 +9,7 @@ working in progress
 
 ```
 pyenv shell anaconda3-4.1.1
-pip install theano
+conda install theano pygpu
 pip install keras
 pip install mypy
 
