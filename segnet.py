@@ -87,33 +87,34 @@ def create_segnet(shape=(3, 224, 244)) -> keras.engine.training.Model :
         pooling="None" ) # type: keras.engine.training.Model
     encoder.summary()
 
-    L = [layer for i, layer in enumerate(encoder.layers) ] # type: Tuple[Int, keras.engine.topology.Layer]
+    L = [layer for i, layer in enumerate(encoder.layers) ] # type: List[keras.engine.topology.Layer]
+    for layer in L: layer.trainable = False # freeze VGG16
     L.reverse()
 
     decoder = Sequential(layers=[
         # Block 5
         DePool2D(L[0], size=L[0].pool_size, input_shape=encoder.output_shape[1:]),
-        Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 4
         DePool2D(L[4], size=L[4].pool_size),
-        Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 3
         DePool2D(L[8], size=L[8].pool_size),
-        Conv2D(L[ 9].filters, L[ 9].kernel_size, padding=L[ 9].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[ 9].filters, L[ 9].kernel_size, padding=L[ 9].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 2
         DePool2D(L[12], size=L[12].pool_size),
-        Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
         # Block 1
         DePool2D(L[15], size=L[15].pool_size),
-        Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding), BatchNormalization(), Activation('relu'),
-        Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding), BatchNormalization(), Activation('relu'),
+        Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+        Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
 
         Activation("softmax")
     ])
@@ -144,9 +145,10 @@ def train(model: keras.engine.training.Model):
     seed = 1
     #image_datagen.fit(images, augment=True, seed=seed)
     #mask_datagen.fit(masks, augment=True, seed=seed)
-
+    img_rows = 480
+    img_cols = 360
     image_generator = image_datagen.flow_from_directory(
-        'data/images',
+        'SegNet-Tutorial/CamVid/train',
         class_mode=None,
         target_size=(img_rows, img_cols),
         batch_size=8,
@@ -154,12 +156,12 @@ def train(model: keras.engine.training.Model):
         seed=seed)
 
     mask_generator = mask_datagen.flow_from_directory(
-        'data/masks',
+        'SegNet-Tutorial/CamVid/trainannot',
         class_mode=None,
-        target_size=(label_rows, label_cols),
+        target_size=(img_rows, img_cols),
         batch_size=8,
         shuffle=False,
-        color_mode='grayscale',
+        #color_mode='grayscale',
         seed=seed)
 
     # combine generators into one which yields image and masks
@@ -181,7 +183,7 @@ def train(model: keras.engine.training.Model):
 
 
 if __name__ == '__main__':
-    segnet = create_segnet(3, 360, 480)
+    segnet = create_segnet((3, 360, 480))
     train(segnet)
     '''
     start = time.time()
