@@ -7,7 +7,8 @@ import numpy as np
 np.random.seed(1337) # for reproducibility
 import os
 os.environ['KERAS_BACKEND'] = 'theano'
-os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
+os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
+#os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
 # os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 import keras
@@ -86,7 +87,7 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
         input_tensor=input_tensor,
         input_shape=shape,
         pooling="None" ) # type: keras.engine.training.Model
-    encoder.summary()
+    #encoder.summary()
 
     L = [layer for i, layer in enumerate(encoder.layers) ] # type: List[keras.engine.topology.Layer]
     for layer in L: layer.trainable = False # freeze VGG16
@@ -118,7 +119,11 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     x = Activation('relu')(BatchNormalization()(Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
     x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
 
-    x = Activation('softmax')(Conv2D(12, (1, 1), padding='valid',)(x))
+    x = Conv2D(12, (1, 1), padding='valid')(x)
+    #x = Reshape((12, 360*480), input_shape=(12,480,360))(x)
+    #x = Permute((2, 1))(x)
+    x = Activation('softmax')(x)
+
 
     predictions = x
 
@@ -127,48 +132,23 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
     segnet.summary()
     return segnet
-    
+
+def read_entry():
+    with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
+        for line in f.readline():
+            yield line.strip().split(' ')
+
+ 
 def train(model: keras.engine.training.Model):
 
-    # we create two instances with the same arguments
-    data_gen_args = dict(
-                        featurewise_center=True,
-                        featurewise_std_normalization=True,
-                        rotation_range=90.,
-                        width_shift_range=0.1,
-                        height_shift_range=0.1,
-                        zoom_range=0.2) # type: dict
-    image_datagen = ImageDataGenerator(**data_gen_args)
-    mask_datagen = ImageDataGenerator(**data_gen_args)
-
-    # Provide the same seed and keyword arguments to the fit and flow methods
-    seed = 1
-    #image_datagen.fit(images, augment=True, seed=seed)
-    #mask_datagen.fit(masks, augment=True, seed=seed)
-    img_rows = 480
-    img_cols = 360
-    image_generator = image_datagen.flow_from_directory(
-        'SegNet-Tutorial/CamVid/train',
-        classes=[],
-        class_mode=None,
-        target_size=(img_rows, img_cols),
-        batch_size=8,
-        shuffle=False,
-        seed=seed)
-
-    # mask は RGBA だと (x,x,x,255) x<=0<12 になってる
-    mask_generator = mask_datagen.flow_from_directory(
-        'SegNet-Tutorial/CamVid/trainannot',
-        class_mode=None,
-        classes=[],
-        target_size=(img_rows, img_cols),
-        batch_size=8,
-        shuffle=False,
-        color_mode='grayscale',
-        seed=seed)
-
+        
     # combine generators into one which yields image and masks
-    train_generator = zip(image_generator, mask_generator)
+    train_generator = zip(
+        image_generator,
+        ( binarylab(a, 12) for a in mask_generator )
+    )
+
+
 
     CLASS_WEIGHTING = [0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
 
@@ -183,7 +163,16 @@ def train(model: keras.engine.training.Model):
         class_weight=CLASS_WEIGHTING
     )
 
-
+# https://github.com/k3nt0w/FCN_via_keras/blob/master/preprocess.py
+def binarylab(label, nb_class):
+    (batch, ch, w, h) = label.shape # == (8,3,480,360) => (8, 12, 480, 360)
+    y = np.zeros((batch, nb_class, w, h), dtype=np.int16)
+    for b in range(batch):
+        for i in range(w):
+            for j in range(h):
+                y[b, label[b][0][i][j], i, j] = 1
+    print(y.shape)
+    return y
 
 
 if __name__ == '__main__':
