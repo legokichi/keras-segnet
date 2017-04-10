@@ -106,7 +106,7 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     x = Activation('relu')(BatchNormalization()(Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
     # Block 3
     x = DePool2D(L[8], size=L[8].pool_size)(x)
-    x = ZeroPadding2D(padding=(0, 1)))(x)
+    x = ZeroPadding2D(padding=(0, 1))(x)
     x = Activation('relu')(BatchNormalization()(Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
     x = Activation('relu')(BatchNormalization()(Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
     # Block 2
