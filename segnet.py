@@ -92,43 +92,40 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     for layer in L: layer.trainable = False # freeze VGG16
     L.reverse()
 
-    decoder = Sequential(layers=[
-        # Block 5
-        DePool2D(L[0], size=L[0].pool_size, input_shape=encoder.output_shape[1:]),
-        Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        # Block 4
-        DePool2D(L[4], size=L[4].pool_size),
-        Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        # Block 3
-        DePool2D(L[8], size=L[8].pool_size),
-        ZeroPadding2D(padding=(0, 1)),
-        Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        # Block 2
-        DePool2D(L[12], size=L[12].pool_size),
-        Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        # Block 1
-        DePool2D(L[15], size=L[15].pool_size),
-        Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
-        Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros'), BatchNormalization(), Activation('relu'),
+    x = encoder.output
 
+    # Block 5
+    x = DePool2D(L[0], size=L[0].pool_size, input_shape=encoder.output_shape[1:])(x)
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    # Block 4
+    x = DePool2D(L[4], size=L[4].pool_size)(x)
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    # Block 3
+    x = DePool2D(L[8], size=L[8].pool_size)(x)
+    x = ZeroPadding2D(padding=(0, 1)))(x)
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    # Block 2
+    x = DePool2D(L[12], size=L[12].pool_size)(x)
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    # Block 1
+    x = DePool2D(L[15], size=L[15].pool_size)(x)
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
 
-        Conv2D(12, (1, 1), padding='valid',),
-        Activation('softmax'),
-    ])
-    decoder.summary()
+    x = Activation('softmax')(Conv2D(12, (1, 1), padding='valid',)(x))
 
-    segnet = Model(
-        inputs=encoder.inputs,
-        outputs=decoder(encoder.outputs) ) # type: keras.engine.training.Model
+    predictions = x
+
+    segnet = Model(input=encoder.inputs, outputs=predictions) # type: keras.engine.training.Model
     sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
     segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
-    #segnet.summary()
+    segnet.summary()
     return segnet
     
 def train(model: keras.engine.training.Model):
