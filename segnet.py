@@ -1,8 +1,10 @@
-from typing import Tuple, List, Text, Dict, Any
+from typing import Tuple, List, Text, Dict, Any, Iterator
+
 import time
 import sys
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/")
 import cv2
+from PIL import Image
 import numpy as np
 np.random.seed(1337) # for reproducibility
 import os
@@ -30,6 +32,7 @@ from keras.layers.normalization import BatchNormalization
 from keras.layers import Activation
 from keras.optimizers import SGD
 from keras.preprocessing.image import ImageDataGenerator
+
 
 class DePool2D(UpSampling2D):
     '''
@@ -124,7 +127,6 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     #x = Permute((2, 1))(x)
     x = Activation('softmax')(x)
 
-
     predictions = x
 
     segnet = Model(input=encoder.inputs, outputs=predictions) # type: keras.engine.training.Model
@@ -133,46 +135,42 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     segnet.summary()
     return segnet
 
-def read_entry():
+def read_entry() -> Iterator[Tuple[str, str]] :
+    nb_class = 12
     with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
-        for line in f.readline():
-            yield line.strip().split(' ')
+        while True:
+            (x, y) = tuple([np.einsum('hwc->cwh', cv2.imread(x)) for x in f.readline().strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)])
+            print(x.shape, y.shape)
+            (ch, w, h) = y.shape # == (3, 480, 360)
+            _y = np.zeros((nb_class, w, h), dtype=np.int8) # == (nb_class, 480, 360)
+            for i in range(w):
+                for j in range(h):
+                    _y[y[0][i][j], i, j] = 1
+            print(x.shape, _y.shape)
+            yield (x, _y)
 
- 
+def create_batch(gen: Iterator[Tuple[str, str]], n: int)-> Tuple[Any, Any] :
+    c = [(a, b) for (_, (a, b)) in zip(range(n), gen)]
+    return (np.array([a for (a, b) in c]), np.array([b for (a, b) in c])) # ( (n, 3, 480, 360), (n, nb_class, 480, 360) )
+
+def create_gen():
+    gen = read_entry()
+    yield create_batch(gen)
+
 def train(model: keras.engine.training.Model):
-
-        
-    # combine generators into one which yields image and masks
-    train_generator = zip(
-        image_generator,
-        ( binarylab(a, 12) for a in mask_generator )
-    )
-
-
-
-    CLASS_WEIGHTING = [0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
-
-    segnet.save_weights('model_weight.hdf5')
     print("start")
-
+    model.save_weights('model_weight.hdf5')
     history = model.fit_generator(
-        train_generator,
+        create_gen(),
         steps_per_epoch=2000,
         epochs=50,
         verbose=1,
-        class_weight=CLASS_WEIGHTING
+        class_weight=[0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
     )
 
-# https://github.com/k3nt0w/FCN_via_keras/blob/master/preprocess.py
-def binarylab(label, nb_class):
-    (batch, ch, w, h) = label.shape # == (8,3,480,360) => (8, 12, 480, 360)
-    y = np.zeros((batch, nb_class, w, h), dtype=np.int16)
-    for b in range(batch):
-        for i in range(w):
-            for j in range(h):
-                y[b, label[b][0][i][j], i, j] = 1
-    print(y.shape)
-    return y
+
+
+
 
 
 if __name__ == '__main__':
