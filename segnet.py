@@ -4,14 +4,13 @@ import time
 import sys
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/")
 import cv2
-from PIL import Image
 import numpy as np
 np.random.seed(1337) # for reproducibility
 import os
-os.environ['KERAS_BACKEND'] = 'theano'
-os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
+#os.environ['KERAS_BACKEND'] = 'theano'
+#os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
 #os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
-# os.environ['KERAS_BACKEND'] = 'tensorflow'
+os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 import keras
 # keras.backend.backend()
@@ -19,7 +18,7 @@ import keras
 # keras.backend.epsilon()
 # keras.backend.set_floatx('float32')
 # keras.backend.floatx()
-keras.backend.set_image_data_format('channels_first') # theano
+#keras.backend.set_image_data_format('channels_first') # theano
 # keras.backend.image_data_format()
 
 from keras.applications.vgg16 import VGG16
@@ -123,8 +122,8 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
 
     x = Conv2D(12, (1, 1), padding='valid')(x)
-    #x = Reshape((12, 360*480), input_shape=(12,480,360))(x)
-    #x = Permute((2, 1))(x)
+    x = Reshape((12, 360*480), input_shape=(12,480,360))(x)
+    x = Permute((2, 1))(x)
     x = Activation('softmax')(x)
 
     predictions = x
@@ -139,23 +138,31 @@ def read_entry() -> Iterator[Tuple[str, str]] :
     nb_class = 12
     with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
         while True:
-            (x, y) = tuple([np.einsum('hwc->cwh', cv2.imread(x)) for x in f.readline().strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)])
-            print(x.shape, y.shape)
-            (ch, w, h) = y.shape # == (3, 480, 360)
-            _y = np.zeros((nb_class, w, h), dtype=np.int8) # == (nb_class, 480, 360)
+            #print("a")
+            (x, y) = tuple([np.einsum('hwc->whc', cv2.imread(x)) for x in f.readline().strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)])
+            #print("b")
+            #print(x.shape, y.shape)
+            (w, h, ch) = y.shape # == (3, 480, 360)
+            _y = np.zeros((w, h, nb_class), dtype=np.int8) # == (nb_class, 480, 360)
             for i in range(w):
                 for j in range(h):
-                    _y[y[0][i][j], i, j] = 1
-            print(x.shape, _y.shape)
+                    _y[i, j, y[i][j][0] ] = 1
+            #print(x.shape, _y.shape)
             yield (x, _y)
 
 def create_batch(gen: Iterator[Tuple[str, str]], n: int)-> Tuple[Any, Any] :
     c = [(a, b) for (_, (a, b)) in zip(range(n), gen)]
-    return (np.array([a for (a, b) in c]), np.array([b for (a, b) in c])) # ( (n, 3, 480, 360), (n, nb_class, 480, 360) )
+    a = np.array([a for (a, b) in c]) # (n, 480, 360, 3)
+    b = np.array([b for (a, b) in c]) # (n, 480, 360, 12)
+    _b = np.reshape(b, (8, 480*360, 12))
+    print(_b.shape, _b.ndim)
+    return (a, _b)
 
-def create_gen():
+def create_gen()-> Iterator[Tuple[Any, Any]] :
     gen = read_entry()
-    yield create_batch(gen)
+    while True:
+        yield create_batch(gen, 8)
+
 
 def train(model: keras.engine.training.Model):
     print("start")
@@ -174,7 +181,7 @@ def train(model: keras.engine.training.Model):
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((3, 480, 360))
+    segnet = create_segnet((480, 360, 3))
     train(segnet)
     '''
     start = time.time()
