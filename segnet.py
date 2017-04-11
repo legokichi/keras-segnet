@@ -1,37 +1,14 @@
-from typing import Tuple, List, Text, Dict, Any, Iterator
-
-import time
-import sys
-sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/")
-import cv2
-import numpy as np
-np.random.seed(1337) # for reproducibility
-import os
-#os.environ['KERAS_BACKEND'] = 'theano'
-#os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
-#os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
-os.environ['KERAS_BACKEND'] = 'tensorflow'
-
-import keras
-# keras.backend.backend()
-# keras.backend.set_epsilon(1e-07)
-# keras.backend.epsilon()
-# keras.backend.set_floatx('float32')
-# keras.backend.floatx()
-#keras.backend.set_image_data_format('channels_first') # theano
-# keras.backend.image_data_format()
+from typing import Tuple, List, Text, Dict, Any, Union
 
 from keras.applications.vgg16 import VGG16
 from keras.layers import Input, Flatten
 from keras.layers.core import Dense, Reshape, Permute
 from keras.layers.pooling import MaxPooling2D
-from keras.models import Sequential, Model
+from keras.models import Model
 from keras.layers.convolutional import Conv2D, UpSampling2D, ZeroPadding2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.preprocessing.image import ImageDataGenerator
-
 
 class DePool2D(UpSampling2D):
     '''
@@ -54,11 +31,11 @@ class DePool2D(UpSampling2D):
             is at index 1, in 'tf' mode is it at index 3.
     '''
 
-    def __init__(self, pool2d_layer, *args, **kwargs):
+    def __init__(self, pool2d_layer: MaxPooling2D, *args, **kwargs):
         self._pool2d_layer = pool2d_layer
         super().__init__(*args, **kwargs)
 
-    def get_output(self, train=False):
+    def get_output(self, train: bool=False) -> Union[tensorflow.Variable, theano.shared] :
         X = self.get_input(train)
         if self.dim_ordering == 'th':
             output = keras.backend.repeat_elements(X, self.size[0], axis=2)
@@ -78,7 +55,8 @@ class DePool2D(UpSampling2D):
 
         return f
 
-def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
+
+def create_segnet(shape: Tuple[int,int,int]=(3, 224, 244)) -> keras.engine.training.Model :
     # input_shape: (include_top is False のときのみ) 
     # ex. (3, 224, 244) or (224, 224, 3)
     # 正確に3つの入力チャンネルを持つ必要があり、幅と高さは48以上でなければなりません。
@@ -132,169 +110,5 @@ def create_segnet(shape=(None, 3, 224, 244)) -> keras.engine.training.Model :
     sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
     segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
     segnet.summary()
+
     return segnet
-
-def read_entry() -> Iterator[Tuple[str, str]] :
-    nb_class = 12
-    with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
-        while True:
-            #print("a")
-            (x, y) = tuple([np.einsum('hwc->whc', cv2.imread(x)) for x in f.readline().strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)])
-            #print("b")
-            #print(x.shape, y.shape)
-            (w, h, ch) = y.shape # == (3, 480, 360)
-            _y = np.zeros((w, h, nb_class), dtype=np.int8) # == (nb_class, 480, 360)
-            for i in range(w):
-                for j in range(h):
-                    _y[i, j, y[i][j][0] ] = 1
-            #print(x.shape, _y.shape)
-            yield (x, _y)
-
-def create_batch(gen: Iterator[Tuple[str, str]], n: int)-> Tuple[Any, Any] :
-    c = [(a, b) for (_, (a, b)) in zip(range(n), gen)]
-    a = np.array([a for (a, b) in c]) # (n, 480, 360, 3)
-    b = np.array([b for (a, b) in c]) # (n, 480, 360, 12)
-    _b = np.reshape(b, (8, 480*360, 12))
-    print(_b.shape, _b.ndim)
-    return (a, _b)
-
-def create_gen()-> Iterator[Tuple[Any, Any]] :
-    gen = read_entry()
-    while True:
-        yield create_batch(gen, 8)
-
-
-def train(model: keras.engine.training.Model):
-    print("start")
-    model.save_weights('model_weight.hdf5')
-    history = model.fit_generator(
-        create_gen(),
-        steps_per_epoch=2000,
-        epochs=50,
-        verbose=1,
-        class_weight=[0.2595, 0.1826, 4.5640, 0.1417, 0.5051, 0.3826, 9.6446, 1.8418, 6.6823, 6.2478, 3.0, 7.3614]
-    )
-
-
-
-
-
-
-if __name__ == '__main__':
-    segnet = create_segnet((480, 360, 3))
-    train(segnet)
-    '''
-    start = time.time()
-    segnet.load_weights('segnet/model_weight_ep100.hdf5')
-    end = time.time()
-    print('%30s' % 'load_weights in ', str((end - start)*1000), 'ms')
-    '''
-
-
-exit()
-
-def predict(model: keras.engine.training.Model):
-    start = time.time()
-    frame = np.rollaxis(normalized(cv2.imread("SegNet-Tutorial/CamVid/test/Seq05VD_f02370.png")))
-    end = time.time()
-    print('%30s' % 'imread in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    output = model.predict_proba(frame)
-    end = time.time()
-    print('%30s' % 'predict_proba in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    pred = visualize(np.argmax(output[0],axis=1).reshape((360,480)))
-    cv2.imwrite("output.png", pred)
-    end = time.time()
-    print('%30s' % 'imwrite in ', str((end - start)*1000), 'ms')
-
-
-def create_label_colors() -> np.ndarray:
-    Sky = [128,128,128]
-    Building = [128,0,0]
-    Pole = [192,192,128]
-    Road_marking = [255,69,0]
-    Road = [128,64,128]
-    Pavement = [60,40,222]
-    Tree = [128,128,0]
-    SignSymbol = [192,128,128]
-    Fence = [64,64,128]
-    Car = [64,0,128]
-    Pedestrian = [64,64,0]
-    Bicyclist = [0,128,192]
-    Unlabelled = [0,0,0]
-
-    label_colours = np.array([
-        Sky, Building, Pole, Road, Pavement,
-        Tree, SignSymbol, Fence, Car, Pedestrian, Bicyclist,
-        Unlabelled
-    ])
-    return label_colours
-
-def visualize(temp: np.ndarray) -> np.ndarray:
-    r = temp.copy()
-    g = temp.copy()
-    b = temp.copy()
-    label_colours = create_label_colors()
-
-    for l in range(0,11):
-        r[temp==l]=label_colours[l,0]
-        g[temp==l]=label_colours[l,1]
-        b[temp==l]=label_colours[l,2]
-
-    rgb = np.zeros((temp.shape[0], temp.shape[1], 3))
-    rgb[:,:,0] = (r/255.0)#[:,:,0]
-    rgb[:,:,1] = (g/255.0)#[:,:,1]
-    rgb[:,:,2] = (b/255.0)#[:,:,2]
-    return rgb
-
-def normalized(rgb: np.ndarray) -> np.ndarray:
-    #return rgb/255.0
-    norm=np.zeros((rgb.shape[0], rgb.shape[1], 3),np.float32)
-
-    b=rgb[:,:,0]
-    g=rgb[:,:,1]
-    r=rgb[:,:,2]
-
-    norm[:,:,0]=cv2.equalizeHist(b)
-    norm[:,:,1]=cv2.equalizeHist(g)
-    norm[:,:,2]=cv2.equalizeHist(r)
-
-    return norm
-
-def binarylab(labels: np.ndarray) -> np.ndarray:
-    x = np.zeros([360,480,12])
-    for i in range(360):
-        for j in range(480):
-            x[i,j,labels[i][j]]=1
-    return x
-
-def prep_data()-> Tuple[np.ndarray, np.ndarray] :
-    '''
-    train_data, train_label = prep_data()
-    train_label = np.reshape(train_label, (367, 360*480, 12))
-    '''
-    PATH = './SegNet-Tutorial/CamVid/'
-    train_data = []
-    train_label = []
-    txt = [] # type: List[Tuple[Text, Text]]
-    with open(os.path.join(PATH, 'train.txt')) as f:
-        txt = [line.split(' ') for line in f.readlines()]
-    print(txt)
-    for i in range(len(txt)):
-        data, label = txt[i]
-        data, label = (data[15:], label[15:]) # /SegNet/CamVid/train/0001TP_006690.png -> train/0001TP_006690.png
-        label = label[:-1] # remove \n
-        data, label = ( os.path.join(PATH, data), os.path.join(PATH, label) )
-        train_data.append(np.rollaxis(normalized(cv2.imread(data)),2))
-        train_label.append(binarylab(cv2.imread(label)[:,:,0]))
-        print('.',end='')
-    return np.array(train_data), np.array(train_label)
-
-
-
-
-
-
