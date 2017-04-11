@@ -1,5 +1,6 @@
 from typing import Tuple, List, Text, Dict, Any, Union
 
+from keras.engine.training import Model as _Model
 from keras.applications.vgg16 import VGG16
 from keras.layers import Input, Flatten
 from keras.layers.core import Dense, Reshape, Permute
@@ -35,7 +36,7 @@ class DePool2D(UpSampling2D):
         self._pool2d_layer = pool2d_layer
         super().__init__(*args, **kwargs)
 
-    def get_output(self, train: bool=False) -> Union[tensorflow.Variable, theano.shared] :
+    def get_output(self, train: bool=False) -> Any :
         X = self.get_input(train)
         if self.dim_ordering == 'th':
             output = keras.backend.repeat_elements(X, self.size[0], axis=2)
@@ -56,7 +57,7 @@ class DePool2D(UpSampling2D):
         return f
 
 
-def create_segnet(shape: Tuple[int,int,int]=(3, 224, 244)) -> keras.engine.training.Model :
+def create_segnet(shape: Tuple[int,int,int]=(3, 224, 244)) -> _Model :
     # input_shape: (include_top is False のときのみ) 
     # ex. (3, 224, 244) or (224, 224, 3)
     # 正確に3つの入力チャンネルを持つ必要があり、幅と高さは48以上でなければなりません。
@@ -100,8 +101,8 @@ def create_segnet(shape: Tuple[int,int,int]=(3, 224, 244)) -> keras.engine.train
     x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
 
     x = Conv2D(12, (1, 1), padding='valid')(x)
-    x = Reshape((12, 360*480), input_shape=(12,480,360))(x)
-    x = Permute((2, 1))(x)
+    #x = Reshape((12, 360*480), input_shape=(12,480,360))(x)
+    #x = Permute((2, 1))(x)
     x = Activation('softmax')(x)
 
     predictions = x

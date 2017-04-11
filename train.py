@@ -61,15 +61,19 @@ def read_entry(nb_class = 12) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
             yield (_x, _y)
 
 def create_batch(batch_size: int)-> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    gen = read_entry()
     while True:
-        batch_data = [XY for (_, XY) in zip(range(batch_size), gen)]
-        if len(batch_data) == 0: break
-        _x = np.array([x for (x, y) in batch_data]) # (n, 480, 360, 3)
-        _y = np.array([y for (x, y) in batch_data]) # (n, 480, 360, nb_class)
-        if _x.shape[0] != batch_size: break
-        #print(_x.shape, _y.shape)
-        yield (_x, _y)
+        gen = read_entry()
+        i = 0
+        while True:
+            batch_data = [XY for (_, XY) in zip(range(batch_size), gen)]
+            if len(batch_data) == 0: break
+            _x = np.array([x for (x, y) in batch_data]) # (n, 480, 360, 3)
+            _y = np.array([y for (x, y) in batch_data]) # (n, 480, 360, nb_class)
+            if _x.shape[0] != batch_size: break
+            print(i, _x.shape, _y.shape)
+            i = i + 1
+            yield (_x, _y)
+        print("recur")
 
 
 
@@ -80,7 +84,7 @@ def train(model: keras.engine.training.Model):
     # exit()
     model.save_weights('model_weight.hdf5')
     history = model.fit_generator(
-        create_gen(),
+        create_batch(8),
         steps_per_epoch=2000,
         epochs=50,
         verbose=1,
@@ -93,7 +97,7 @@ def train(model: keras.engine.training.Model):
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((480, 360, 3))
+    segnet = segnet.create_segnet((480, 360, 3))
     train(segnet)
     '''
     start = time.time()
