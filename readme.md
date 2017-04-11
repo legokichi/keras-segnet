@@ -1,4 +1,8 @@
+# keras-segnet
+
 working in progress
+
+## ref
 
 * https://github.com/pradyu1993/segnet/
 * https://github.com/pradyu1993/segnet/issues/10
@@ -8,6 +12,8 @@ working in progress
 * https://github.com/alexgkendall/caffe-segnet
 * https://github.com/alexgkendall/SegNet-Tutorial
 
+## install
+
 ```
 pyenv shell anaconda3-4.1.1
 sudo apt-get install graphviz
@@ -16,9 +22,33 @@ pip install tensorflow-gpu
 pip install keras
 pip install mypy
 pip install pydot_ng
-
-mypy --ignore-missing-imports CamVid.py 
-python CamVid.py 
 ```
 
+## type check
+
+```
+mypy --ignore-missing-imports CamVid.py 
+```
+
+## show model
+
+```
+python SegNet.py
+```
+
+## train
+
+```
+env CUDA_VISIBLE_DEVICES=0 python CamVid.py
+env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
+```
+
+## predict
+
+working in progress
+
+## model
+
 ![segnet](https://raw.githubusercontent.com/legokichi/keras-segnet/master/segnet.png)
+
+

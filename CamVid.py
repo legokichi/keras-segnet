@@ -1,4 +1,5 @@
 from typing import Tuple, List, Text, Dict, Any, Iterator, Union
+import argparse
 import time
 import sys
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/") # mac opencv path
@@ -104,19 +105,23 @@ def normalized(rgb: np.ndarray) -> np.ndarray:
     return norm
 
 
-def train():
+def train(indices: bool):
     model = SegNet.train(
         shape=(480, 360, 3), 
         nb_class=12,
         batch_gen=create_batch(8),
-        class_weight=CLASS_WEIGHT
+        class_weight=CLASS_WEIGHT,
+        indices=indices
     )
     predict(model)
 
 
 
 if __name__ == '__main__':
-    train()
+    parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
+    parser.add_argument("--indices", action='store_true', help='use indices pooling')
+    args = parser.parse_args()
+    train(indices=args.indices)
     exit()
 
 
