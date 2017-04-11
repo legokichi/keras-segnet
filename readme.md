@@ -16,7 +16,7 @@ working in progress
 
 ```
 pyenv shell anaconda3-4.1.1
-brew install graphviz
+sudo apt-get install graphviz
 conda install theano pygpu
 pip install tensorflow-gpu
 pip install keras
