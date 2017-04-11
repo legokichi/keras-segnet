@@ -20,22 +20,7 @@ from keras.backend import argmax, gradients, sum, repeat_elements
 class DePool2D(UpSampling2D):
     '''
     https://github.com/nanopony/keras-convautoencoder/blob/c8172766f968c8afc81382b5e24fd4b57d8ebe71/autoencoder_layers.py#L24
-    Simplar to UpSample, yet traverse only maxpooled elements
-    # Input shape
-        4D tensor with shape:
-        `(samples, channels, rows, cols)` if dim_ordering='th'
-        or 4D tensor with shape:
-        `(samples, rows, cols, channels)` if dim_ordering='tf'.
-    # Output shape
-        4D tensor with shape:
-        `(samples, channels, upsampled_rows, upsampled_cols)` if dim_ordering='th'
-        or 4D tensor with shape:
-        `(samples, upsampled_rows, upsampled_cols, channels)` if dim_ordering='tf'.
-    # Arguments
-        size: tuple of 2 integers. The upsampling factors for rows and columns.
-        dim_ordering: 'th' or 'tf'.
-            In 'th' mode, the channels dimension (the depth)
-            is at index 1, in 'tf' mode is it at index 3.
+    Simplar to UpSample, yet traverse only maxpooled elements.
     '''
 
     def __init__(self, pool2d_layer: MaxPooling2D, *args, **kwargs):
@@ -44,23 +29,12 @@ class DePool2D(UpSampling2D):
 
     def get_output(self, train: bool=False) -> Any :
         X = self.get_input(train)
-        if self.dim_ordering == 'th':
-            output = repeat_elements(X, self.size[0], axis=2)
-            output = repeat_elements(output, self.size[1], axis=3)
-        elif self.dim_ordering == 'tf':
-            output = repeat_elements(X, self.size[0], axis=1)
-            output = repeat_elements(output, self.size[1], axis=2)
-        else:
-            raise Exception('Invalid dim_ordering: ' + self.dim_ordering)
-
-        f = gradients(
+        return gradients(
             sum(
                 self._pool2d_layer.get_output(train)
             ),
             self._pool2d_layer.get_input(train)
         ) * output
-
-        return f
 
 
 def create_segnet(shape: Tuple[int,int,int], nb_class: int, indecis: bool) -> tModel :
@@ -163,7 +137,7 @@ def load() -> tModel :
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((480, 360, 3), 12, indecis=True)
+    segnet = create_segnet((480, 360, 3), 12, indecis=False)
     segnet.summary()
     plot_model(segnet, to_file='segnet.png', show_shapes=True, show_layer_names=True)
     exit()
