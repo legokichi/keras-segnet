@@ -121,7 +121,7 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     if shape[2] != 3:
         raise TypeError("shape[2] != 3")
     name = "segnet"
-    name += datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_"
+    name += "_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     if indices: name += "_indices"
 
     old_session = KTF.get_session()
@@ -133,7 +133,7 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
         callbacks = [] # type: List[Callback]
 
         # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
-        callbacks.append(TensorBoard(log_dir='./log', histogram_freq=1, write_graph=True, write_images=True))
+        callbacks.append(TensorBoard(log_dir=name+'_log', histogram_freq=1, write_graph=True, write_images=True))
 
         segnet = create_segnet(shape, nb_class, indices)
         with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())

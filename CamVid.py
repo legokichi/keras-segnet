@@ -61,6 +61,9 @@ def create_valid(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterat
     return create_gen('./SegNet-Tutorial/CamVid/test.txt', batch_size, nb_class, ignored)
 
 def create_gen(filename: str, batch_size: int, nb_class: int, ignored: int) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    '''
+    -> (float32, float32)
+    '''
     with open(filename, 'r') as f:
         lines = f.readlines()
     pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]
@@ -78,26 +81,37 @@ def create_gen(filename: str, batch_size: int, nb_class: int, ignored: int) -> I
             yield (_x, _y)
 
 def proc(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray] :
+    '''
+    data augmentation
+    uint8 -> float32
+    ((w, h, 3), (w, h, 12))-> ((w, h, 3), (w, h, 12))
+    '''
     if np.random.randint(0, 2) == 1:
         x = cv2.flip(x, 1)
         y = cv2.flip(y, 1)
-    return (x, y)
+    return (x.astype("float32"), y.astype("float32"))
 
 def preprocess_input(filename: str) -> np.ndarray:
-    img = np.einsum('hwc->whc', cv2.imread(filename))
+    '''
+    -> uint8
+    -> (w, h, 3)
+    '''
+    img = np.einsum('hwc->whc', cv2.cvtColor(cv2.imread(filename), cv2.COLOR_BGR2RGB))
     _img = normalized(img)
     return _img
 
 def preprocess_teacher(filename: str, nb_class: int, ignored: int) -> np.ndarray:
     '''
     labeling
+    -> uint8
+    -> (w, h, 12)
     '''
     # label は RGB すべてに 0~255 の範囲のクラス値が入っている
-    img = np.einsum('hw->wh', cv2.imread(filename, cv2.IMREAD_GRAYSCALE).astype(np.int32) )
+    img = np.einsum('hw->wh', cv2.imread(filename, cv2.IMREAD_GRAYSCALE))
     (w, h) = img.shape # == (480, 360)
     # https://github.com/pfnet-research/chainer-segnet/blob/ca84cd694351eeaff357656e76baa310dc455e66/lib/camvid.py#L63
     #img[np.where(img == ignored)] = -1 # ラベル ignored は Unlabelled
-    _img = np.zeros((w, h, nb_class), dtype=np.int8) # == (480, 360, nb_class)
+    _img = np.zeros((w, h, nb_class), dtype=np.uint8) # == (480, 360, nb_class)
     # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
     for i in range(w):
         for j in range(h):
@@ -109,8 +123,9 @@ def normalized(rgb: np.ndarray) -> np.ndarray:
     '''
     equalizeHist for RGB
     return rgb/255.0
+    uint8 -> uint8
     '''
-    norm=np.zeros((rgb.shape[0], rgb.shape[1], 3),np.float32)
+    norm = np.ones(rgb.shape, rgb.dtype)*255
 
     r=rgb[:,:,0]
     g=rgb[:,:,1]
