@@ -14,7 +14,7 @@ from keras.layers.normalization import BatchNormalization
 from keras.layers import Activation
 from keras.optimizers import SGD
 from keras.utils import plot_model
-from keras.callbacks import ModelCheckpoint, Callback
+from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.backend import argmax, gradients, sum, repeat_elements
 
 class DePool2D(UpSampling2D):
@@ -113,7 +113,7 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     callbacks = [] # type: List[Callback]
 
     # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
-    # callbacks.append( __something__tensorboard__ )
+    callbacks.append(TensorBoard(log_dir='./log', histogram_freq=1, write_graph=True, write_images=True))
 
     segnet = create_segnet(shape, nb_class, indices)
     with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())

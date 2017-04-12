@@ -41,6 +41,7 @@ python SegNet.py
 ```
 env CUDA_VISIBLE_DEVICES=0 python CamVid.py
 env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
+tensorboard --logdir=log --port=8888
 ```
 
 ## predict
