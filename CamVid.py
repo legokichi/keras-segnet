@@ -69,7 +69,7 @@ def batch_len(batch_size: int):
     with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
         return int(len(f.readlines())/batch_size)
 
-def create_valid():
+def create_valid(batch_size: int=8, nb_class: int=12, ignored: int=11):
     with open('./SegNet-Tutorial/CamVid/test.txt', 'r') as f:
         lines = f.readlines()
     pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]

@@ -18,6 +18,8 @@ from keras.optimizers import SGD
 from keras.utils import plot_model
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.backend import argmax, gradients, sum, repeat_elements
+import keras.backend.tensorflow_backend as KTF
+import tensorflow as tf
 
 class DePool2D(UpSampling2D):
     '''
@@ -122,6 +124,11 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     name += datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_"
     if indices: name += "_indices"
 
+    old_session = KTF.get_session()
+    session = tf.Session("")
+    KTF.set_session(session)
+    KTF.set_learning_phase(1)
+
     callbacks = [] # type: List[Callback]
 
     # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
@@ -130,7 +137,7 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     segnet = create_segnet(shape, nb_class, indices)
     with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
     segnet.save_weights(name+'_weight.hdf5')
-    
+
     hist = segnet.fit_generator(
         batch_gen,
         steps_per_epoch=batch_gen_len,
@@ -142,6 +149,8 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
         validation_steps=batch_gen_len,
     )
     with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
+
+    KTF.set_session(old_session)
 
     return segnet
 
