@@ -65,6 +65,24 @@ def create_batch(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterat
         yield (_x, _y)
 
 
+def batch_len(batch_size: int):
+    with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
+        return int(len(f.readlines())/batch_size)
+
+def create_valid():
+    with open('./SegNet-Tutorial/CamVid/test.txt', 'r') as f:
+        lines = f.readlines()
+    pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]
+    while True:
+        selected = random.sample(pairs, batch_size) # type: List[Tuple[str, str]]
+        loaded = [(preprocess_input(x), preprocess_teacher(y, nb_class, ignored)) for (x, y) in selected] # type: List[Tuple[np.ndarray, np.ndarray]]
+        _x = np.array([x for (x, y) in loaded]) # (n, 480, 360, 3)
+        _y = np.array([y for (x, y) in loaded]) # (n, 480, 360, nb_class)
+        yield (_x, _y)
+
+
+
+
 def preprocess_input(filename: str) -> np.ndarray:
     img = np.einsum('hwc->whc', cv2.imread(filename))
     _img = normalized(img)
@@ -111,7 +129,9 @@ def train(indices: bool):
         nb_class=12,
         batch_gen=create_batch(8),
         class_weight=CLASS_WEIGHT,
-        indices=indices
+        indices=indices,
+        valid_gen=create_valid(),
+        batch_gen_len=batch_len(8),
     )
     predict(model)
 

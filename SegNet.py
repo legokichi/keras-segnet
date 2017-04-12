@@ -1,6 +1,8 @@
 from typing import Tuple, List, Text, Dict, Any, Iterator
 
 import numpy as np
+from datetime import datetime
+
 
 from keras.engine.training import Model as tModel
 from keras.applications.vgg16 import VGG16
@@ -29,6 +31,15 @@ class DePool2D(UpSampling2D):
 
     def get_output(self, train: bool=False) -> Any :
         X = self.get_input(train)
+        if self.dim_ordering == 'th':
+            output = repeat_elements(X, self.size[0], axis=2)
+            output = repeat_elements(output, self.size[1], axis=3)
+        elif self.dim_ordering == 'tf':
+            output = repeat_elements(X, self.size[0], axis=1)
+            output = repeat_elements(output, self.size[1], axis=2)
+        else:
+            raise Exception('Invalid dim_ordering: ' + self.dim_ordering)
+
         return gradients(
             sum(
                 self._pool2d_layer.get_output(train)
@@ -96,19 +107,20 @@ def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tM
 
     segnet = Model(inputs=encoder.inputs, outputs=predictions) # type: tModel
     sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
-    segnet.compile(loss="categorical_crossentropy", optimizer=sgd)
+    segnet.compile(loss="categorical_crossentropy", optimizer=sgd, metrics=['accuracy'])
 
     return segnet
 
 
 
-def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[np.ndarray, np.ndarray]], class_weight: List[float], indices: bool) -> tModel :
+def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[np.ndarray, np.ndarray]], valid_gen: Iterator[Tuple[np.ndarray, np.ndarray]], class_weight: List[float], indices: bool, batch_gen_len: int) -> tModel :
     if len(class_weight) != nb_class:
         raise TypeError("len(class_weight) != nb_class")
     if shape[2] != 3:
         raise TypeError("shape[2] != 3")
     name = "segnet"
-    if indices: name = "segnet_indecis"
+    name += datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_"
+    if indices: name += "_indices"
 
     callbacks = [] # type: List[Callback]
 
@@ -121,11 +133,13 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     
     hist = segnet.fit_generator(
         batch_gen,
-        steps_per_epoch=1000,
-        epochs=50,
+        steps_per_epoch=batch_gen_len,
+        epochs=1000,
         verbose=1,
         class_weight=class_weight,
-        callbacks=callbacks
+        callbacks=callbacks,
+        validation_data=valid_gen,
+        validation_steps=batch_gen_len,
     )
     with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
 
@@ -139,7 +153,8 @@ def load() -> tModel :
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((480, 360, 3), 12, indecis=False)
+    segnet = create_segnet((480, 360, 3), 12, indices=False)
     segnet.summary()
     plot_model(segnet, to_file='segnet.png', show_shapes=True, show_layer_names=True)
+    with open('segnet_model.json', 'w') as f: f.write(segnet.to_json())
     exit()
