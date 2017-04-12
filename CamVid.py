@@ -50,38 +50,38 @@ def create_label_colors() -> np.ndarray:
     return label_colours
 
 # for CamVid
-def create_batch(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    '''
-    channels_last
-    '''
-    with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
-        lines = f.readlines()
-    pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]
-    while True:
-        selected = random.sample(pairs, batch_size) # type: List[Tuple[str, str]]
-        loaded = [(preprocess_input(x), preprocess_teacher(y, nb_class, ignored)) for (x, y) in selected] # type: List[Tuple[np.ndarray, np.ndarray]]
-        _x = np.array([x for (x, y) in loaded]) # (n, 480, 360, 3)
-        _y = np.array([y for (x, y) in loaded]) # (n, 480, 360, nb_class)
-        yield (_x, _y)
-
-
-def batch_len(batch_size: int):
+def batch_len(batch_size: int) -> int :
     with open('./SegNet-Tutorial/CamVid/train.txt', 'r') as f:
         return int(len(f.readlines())/batch_size)
 
-def create_valid(batch_size: int=8, nb_class: int=12, ignored: int=11):
-    with open('./SegNet-Tutorial/CamVid/test.txt', 'r') as f:
+def create_batch(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    return create_gen('./SegNet-Tutorial/CamVid/train.txt', batch_size, nb_class, ignored)
+
+def create_valid(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    return create_gen('./SegNet-Tutorial/CamVid/test.txt', batch_size, nb_class, ignored)
+
+def create_gen(filename: str, batch_size: int, nb_class: int, ignored: int) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    with open(filename, 'r') as f:
         lines = f.readlines()
     pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]
     while True:
-        selected = random.sample(pairs, batch_size) # type: List[Tuple[str, str]]
-        loaded = [(preprocess_input(x), preprocess_teacher(y, nb_class, ignored)) for (x, y) in selected] # type: List[Tuple[np.ndarray, np.ndarray]]
-        _x = np.array([x for (x, y) in loaded]) # (n, 480, 360, 3)
-        _y = np.array([y for (x, y) in loaded]) # (n, 480, 360, nb_class)
-        yield (_x, _y)
+        to_shuffle = pairs[:]
+        random.shuffle(to_shuffle)
+        shuffled = iter(to_shuffle)
+        while True:
+            batch = [a for (a, b) in zip(shuffled, range(batch_size))]
+            if len(batch) == 0: break
+            loaded = [proc(preprocess_input(x), preprocess_teacher(y, nb_class, ignored)) for (x, y) in batch] # type: List[Tuple[np.ndarray, np.ndarray]]
+            _x = np.array([x for (x, y) in loaded]) # (n, 480, 360, 3)
+            _y = np.array([y for (x, y) in loaded]) # (n, 480, 360, nb_class)
+            if _x.shape[0] != batch_size: break
+            yield (_x, _y)
 
-
-
+def proc(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray] :
+    if np.random.randint(0, 2) == 1:
+        x = cv2.flip(x, 1)
+        y = cv2.flip(y, 1)
+    return (x, y)
 
 def preprocess_input(filename: str) -> np.ndarray:
     img = np.einsum('hwc->whc', cv2.imread(filename))
@@ -96,7 +96,7 @@ def preprocess_teacher(filename: str, nb_class: int, ignored: int) -> np.ndarray
     img = np.einsum('hw->wh', cv2.imread(filename, cv2.IMREAD_GRAYSCALE).astype(np.int32) )
     (w, h) = img.shape # == (480, 360)
     # https://github.com/pfnet-research/chainer-segnet/blob/ca84cd694351eeaff357656e76baa310dc455e66/lib/camvid.py#L63
-    img[np.where(img == ignored)] = -1 # ラベル ignored は Unlabelled
+    #img[np.where(img == ignored)] = -1 # ラベル ignored は Unlabelled
     _img = np.zeros((w, h, nb_class), dtype=np.int8) # == (480, 360, nb_class)
     # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
     for i in range(w):
@@ -112,13 +112,13 @@ def normalized(rgb: np.ndarray) -> np.ndarray:
     '''
     norm=np.zeros((rgb.shape[0], rgb.shape[1], 3),np.float32)
 
-    b=rgb[:,:,0]
+    r=rgb[:,:,0]
     g=rgb[:,:,1]
-    r=rgb[:,:,2]
+    b=rgb[:,:,2]
 
-    norm[:,:,0]=cv2.equalizeHist(b)
+    norm[:,:,0]=cv2.equalizeHist(r)
     norm[:,:,1]=cv2.equalizeHist(g)
-    norm[:,:,2]=cv2.equalizeHist(r)
+    norm[:,:,2]=cv2.equalizeHist(b)
 
     return norm
 

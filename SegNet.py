@@ -125,30 +125,31 @@ def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[
     if indices: name += "_indices"
 
     old_session = KTF.get_session()
-    session = tf.Session("")
-    KTF.set_session(session)
-    KTF.set_learning_phase(1)
+    with tf.Graph().as_default():
+        session = tf.Session("")
+        KTF.set_session(session)
+        KTF.set_learning_phase(1)
 
-    callbacks = [] # type: List[Callback]
+        callbacks = [] # type: List[Callback]
 
-    # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
-    callbacks.append(TensorBoard(log_dir='./log', histogram_freq=1, write_graph=True, write_images=True))
+        # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
+        callbacks.append(TensorBoard(log_dir='./log', histogram_freq=1, write_graph=True, write_images=True))
 
-    segnet = create_segnet(shape, nb_class, indices)
-    with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
-    segnet.save_weights(name+'_weight.hdf5')
+        segnet = create_segnet(shape, nb_class, indices)
+        with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
+        segnet.save_weights(name+'_weight.hdf5')
 
-    hist = segnet.fit_generator(
-        batch_gen,
-        steps_per_epoch=batch_gen_len,
-        epochs=1000,
-        verbose=1,
-        class_weight=class_weight,
-        callbacks=callbacks,
-        validation_data=valid_gen,
-        validation_steps=batch_gen_len,
-    )
-    with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
+        hist = segnet.fit_generator(
+            batch_gen,
+            steps_per_epoch=batch_gen_len,
+            epochs=1000,
+            verbose=1,
+            class_weight=class_weight,
+            callbacks=callbacks,
+            validation_data=valid_gen,
+            validation_steps=batch_gen_len,
+        )
+        with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
 
     KTF.set_session(old_session)
 
