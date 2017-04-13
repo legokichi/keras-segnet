@@ -1,8 +1,6 @@
 from typing import Tuple, List, Text, Dict, Any, Iterator
 
 import numpy as np
-from datetime import datetime
-
 
 from keras.engine.training import Model as tModel
 from keras.applications.vgg16 import VGG16
@@ -10,16 +8,12 @@ from keras.layers import Input, Flatten
 from keras.layers.core import Lambda
 from keras.engine.topology import Layer
 from keras.layers.pooling import MaxPooling2D
-from keras.models import Model, model_from_json
+from keras.models import Model
 from keras.layers.convolutional import Conv2D, UpSampling2D, ZeroPadding2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers import Activation
-from keras.optimizers import SGD
 from keras.utils import plot_model
-from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.backend import argmax, gradients, sum, repeat_elements
-import keras.backend.tensorflow_backend as KTF
-import tensorflow as tf
 
 class DePool2D(UpSampling2D):
     '''
@@ -101,65 +95,15 @@ def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tM
     x = Activation('relu')(BatchNormalization()(Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
     x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal", bias_initializer='zeros')(x)))
 
-    x = Conv2D(nb_class, (1, 1), padding='valid')(x)
+    x = Conv2D(nb_class, (1, 1), padding='valid', kernel_initializer="he_normal", bias_initializer='zeros')(x)
 
     x = Activation('softmax')(x)
     
     predictions = x
 
     segnet = Model(inputs=encoder.inputs, outputs=predictions) # type: tModel
-    sgd = SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True)
-    segnet.compile(loss="categorical_crossentropy", optimizer=sgd, metrics=['accuracy'])
 
     return segnet
-
-
-
-def train(shape: Tuple[int, int, int], nb_class: int, batch_gen: Iterator[Tuple[np.ndarray, np.ndarray]], valid_gen: Iterator[Tuple[np.ndarray, np.ndarray]], class_weight: List[float], indices: bool, batch_gen_len: int) -> tModel :
-    if len(class_weight) != nb_class:
-        raise TypeError("len(class_weight) != nb_class")
-    if shape[2] != 3:
-        raise TypeError("shape[2] != 3")
-    name = "segnet"
-    name += "_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    if indices: name += "_indices"
-
-    old_session = KTF.get_session()
-    with tf.Graph().as_default():
-        session = tf.Session("")
-        KTF.set_session(session)
-        KTF.set_learning_phase(1)
-
-        callbacks = [] # type: List[Callback]
-
-        # callbacks.append( ModelCheckpoint("weights.{epoch:02d}-{val_loss:.2f}.hdf5", verbose=1, save_best_only=True, save_weights_only=True) )
-        callbacks.append(TensorBoard(log_dir=name+'_log', histogram_freq=1, write_graph=True, write_images=True))
-
-        segnet = create_segnet(shape, nb_class, indices)
-        with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
-        segnet.save_weights(name+'_weight.hdf5')
-
-        hist = segnet.fit_generator(
-            batch_gen,
-            steps_per_epoch=batch_gen_len,
-            epochs=1000,
-            verbose=1,
-            class_weight=class_weight,
-            callbacks=callbacks,
-            validation_data=valid_gen,
-            validation_steps=batch_gen_len,
-        )
-        with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
-
-    KTF.set_session(old_session)
-
-    return segnet
-
-def load() -> tModel :
-    with open('segnet.json', 'w') as f:
-        model = model_from_json(f.read())
-    model.load_weights('segnet_weight.hdf5')
-    return model
 
 
 if __name__ == '__main__':

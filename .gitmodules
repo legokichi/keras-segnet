@@ -1,6 +1,6 @@
-[submodule "SegNet-Tutorial"]
-	path = SegNet-Tutorial
-	url = https://github.com/alexgkendall/SegNet-Tutorial
-[submodule "segnet"]
-	path = segnet
-	url = https://github.com/pradyu1993/segnet.git
+[submodule "coco"]
+	path = coco
+	url = https://github.com/pdollar/coco.git
+[submodule "chainer-segnet"]
+	path = chainer-segnet
+	url = https://github.com/pfnet-research/chainer-segnet.git

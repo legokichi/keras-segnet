@@ -15,6 +15,7 @@ working in progress
 ## install
 
 ```
+git clone --recursive https://github.com/legokichi/keras-segnet.git
 pyenv shell anaconda3-4.1.1
 sudo apt-get install graphviz
 conda install theano pygpu
@@ -41,7 +42,8 @@ python SegNet.py
 ```
 env CUDA_VISIBLE_DEVICES=0 python CamVid.py
 env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
-tensorboard --logdir=log --port=8888
+tensorboard --port=8888 --logdir=log
+jupyter notebook --ip=0.0.0.0
 ```
 
 ## predict

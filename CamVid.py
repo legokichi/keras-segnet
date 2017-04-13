@@ -1,30 +1,234 @@
-from typing import Tuple, List, Text, Dict, Any, Iterator, Union
+from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized
+
 import argparse
 import time
+import random
+from datetime import datetime
 import sys
+
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/") # mac opencv path
 import cv2
+
 import numpy as np
-np.random.seed(1337) # for reproducibility
+np.random.seed(2017) # for reproducibility
+
 import os
 #os.environ['KERAS_BACKEND'] = 'theano'
 #os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
 #os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-import random
-
-
-import keras
+from keras.backend import set_image_data_format
 # keras.backend.backend()
 # keras.backend.set_epsilon(1e-07)
 # keras.backend.epsilon()
 # keras.backend.set_floatx('float32')
 # keras.backend.floatx()
-# keras.backend.set_image_data_format('channels_first') # theano
+# set_image_data_format('channels_first') # theano
+set_image_data_format("channels_last")
 # keras.backend.image_data_format()
 from keras.preprocessing.image import ImageDataGenerator
+from keras.models import model_from_json
+from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
+from keras.optimizers import SGD
+import keras.backend.tensorflow_backend as KTF
 
-import SegNet
+import tensorflow as tf
+
+from chainer import iterators
+
+sys.path.append("./chainer-segnet")
+from lib import CamVid
+
+from SegNet import create_segnet
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
+    parser.add_argument("--indices", action='store_true', help='use indices pooling')
+    args = parser.parse_args()
+
+    indices = args.indices
+
+    class_weight = [float(w) for w in open("data/train_freq.csv").readline().split(',')] # type: List[float]
+    n_classes = len(class_weight) # type: int
+    ignore_labels = [11]
+
+    train = CamVid(
+        # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
+        img_dir="data/train",
+        lbl_dir="data/trainannot",
+        list_fn="data/train.txt",
+        mean="data/train_mean.npy",
+        std="data/train_std.npy",
+        shift_jitter=50,
+        scale_jitter=0.2,
+        fliplr=True,
+        rotate=True,
+        rotate_max=7,
+        scale=1.0,
+        ignore_labels=ignore_labels,
+    ) # type: Sized
+    valid = CamVid(
+        # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
+        img_dir="data/val",
+        lbl_dir="data/valannot",
+        list_fn="data/val.txt",
+        mean="data/train_mean.npy",
+        std="data/train_std.npy",
+        ignore_labels=ignore_labels,
+    ) # type: Sized
+
+    train_iter = iterators.MultiprocessIterator(
+        train,
+        batch_size=8,
+        n_prefetch=10
+    ) # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
+    valid_iter = iterators.SerialIterator(
+        valid,
+        batch_size=16,
+        #repeat=False,
+        shuffle=False
+    ) # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
+
+    def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+        while True:
+            batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
+            # len(batch) === 16
+            # pair = batch[0] # type: Tuple[np.ndarray, np.ndarray]
+            # img  = pair[0] # type: np.ndarray
+            # mask = pair[1] # type: np.ndarray
+            # img.shape == (3, 360, 480)
+            # mask.shape == (360, 480)
+            # str(img.dtype) == "float32"
+            # str(mask.dtype) == "int32"
+            xs = [np.einsum('chw->whc', x) for (x, _) in batch] # type: List[np.ndarray]
+
+            ys = [] # type: List[np.ndarray]
+            for (_, y) in batch:
+                y = np.einsum('hw->wh', y)
+                # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
+                (w, h) = y.shape # == (480, 360)
+                _y = np.zeros((w, h, n_classes), dtype=np.uint8) # == (480, 360, n_classes)
+                for i in range(w):
+                    for j in range(h):
+                        _class = y[i][j]
+                        if _class == -1: # ignore_labels
+                            _class = ignore_labels[0]
+                        _y[i, j, _class] = 1
+                ys.append(_y)
+
+            _xs = np.array(xs) # (n, 480, 360, 3)
+            _ys = np.array(ys) # (n, 480, 360, n_classes)
+            yield (_xs, _ys)
+
+    _train_iter = convert_to_keras_batch(train_iter) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+    _valid_iter = convert_to_keras_batch(valid_iter) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+    
+    name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    if indices: name += "_indices"
+
+    old_session = KTF.get_session()
+    with tf.Graph().as_default():
+        session = tf.Session("")
+        KTF.set_session(session)
+        KTF.set_learning_phase(1)
+
+        segnet = create_segnet((480, 360, 3), n_classes, indices)
+        segnet.compile(
+            loss="categorical_crossentropy",
+            optimizer=SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True),
+            metrics=['accuracy']
+        )
+
+        with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
+        segnet.save_weights(name+'_weight.hdf5')
+
+        callbacks = [] # type: List[Callback]
+
+        callbacks.append(ModelCheckpoint(
+            name+"weights.{epoch:02d}-{val_loss:.2f}.hdf5",
+            verbose=1,
+            save_best_only=True,
+            save_weights_only=True
+        ))
+        callbacks.append(TensorBoard(
+            log_dir=name+'_log',
+            histogram_freq=1,
+            write_graph=True,
+            write_images=True
+        ))
+
+        hist = segnet.fit_generator(
+            generator=_train_iter,
+            steps_per_epoch=len(train),
+            epochs=200,
+            verbose=1,
+            callbacks=callbacks,
+            validation_data=_valid_iter,
+            validation_steps=len(valid),
+            class_weight=class_weight,
+            #initial_epoch
+        )
+
+        with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
+
+    KTF.set_session(old_session)
+
+    exit()
+
+
+exit()
+
+
+def predict(model: Union[keras.engine.training.Model, None]):
+    if model == None: 
+        start = time.time()
+        model = SegNet.load()
+        end = time.time()
+        print('%30s' % 'load_weights in ', str((end - start)*1000), 'ms')
+
+
+    start = time.time()
+    frame = np.einsum('hwc->whc', normalized(cv2.imread("SegNet-Tutorial/CamVid/test/Seq05VD_f02370.png")))
+    end = time.time()
+    print('%30s' % 'imread in ', str((end - start)*1000), 'ms')
+
+    start = time.time()
+    output = model.predict_proba(frame)
+    end = time.time()
+    print('%30s' % 'predict_proba in ', str((end - start)*1000), 'ms')
+
+    start = time.time()
+    labeled = np.argmax(output[0], axis=1)
+    img = np.einsum('whc->hwc', visualize(labeled))
+    cv2.imwrite("output.png", img)
+    end = time.time()
+    print('%30s' % 'imwrite in ', str((end - start)*1000), 'ms')
+
+
+
+def visualize(labeled: np.ndarray) -> np.ndarray:
+    '''
+    labeled: (w, h, c=0~11)
+    '''
+    r = labeled.copy()
+    g = labeled.copy()
+    b = labeled.copy()
+    label_colours = create_label_colors()
+
+    for l in range(0,11):
+        r[labeled==l]=label_colours[l,0]
+        g[labeled==l]=label_colours[l,1]
+        b[labeled==l]=label_colours[l,2]
+
+    rgb = np.zeros((labeled.shape[0], labeled.shape[1], 3))
+    rgb[:,:,0] = (r/255.0)#[:,:,0]
+    rgb[:,:,1] = (g/255.0)#[:,:,1]
+    rgb[:,:,2] = (b/255.0)#[:,:,2]
+    return rgb # (w, h, c)
+
+
 
 # for CamVid
 # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/segnet_train.prototxt
@@ -118,7 +322,6 @@ def preprocess_teacher(filename: str, nb_class: int, ignored: int) -> np.ndarray
             _img[i, j, img[i][j]] = 1
     return _img
 
-
 def normalized(rgb: np.ndarray) -> np.ndarray:
     '''
     equalizeHist for RGB
@@ -138,72 +341,4 @@ def normalized(rgb: np.ndarray) -> np.ndarray:
     return norm
 
 
-def train(indices: bool):
-    model = SegNet.train(
-        shape=(480, 360, 3), 
-        nb_class=12,
-        batch_gen=create_batch(8),
-        class_weight=CLASS_WEIGHT,
-        indices=indices,
-        valid_gen=create_valid(),
-        batch_gen_len=batch_len(8),
-    )
-    predict(model)
-
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
-    parser.add_argument("--indices", action='store_true', help='use indices pooling')
-    args = parser.parse_args()
-    train(indices=args.indices)
-    exit()
-
-
-def predict(model: Union[keras.engine.training.Model, None]):
-    if model == None: 
-        start = time.time()
-        model = SegNet.load()
-        end = time.time()
-        print('%30s' % 'load_weights in ', str((end - start)*1000), 'ms')
-
-
-    start = time.time()
-    frame = np.einsum('hwc->whc', normalized(cv2.imread("SegNet-Tutorial/CamVid/test/Seq05VD_f02370.png")))
-    end = time.time()
-    print('%30s' % 'imread in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    output = model.predict_proba(frame)
-    end = time.time()
-    print('%30s' % 'predict_proba in ', str((end - start)*1000), 'ms')
-
-    start = time.time()
-    labeled = np.argmax(output[0], axis=1)
-    img = np.einsum('whc->hwc', visualize(labeled))
-    cv2.imwrite("output.png", img)
-    end = time.time()
-    print('%30s' % 'imwrite in ', str((end - start)*1000), 'ms')
-
-
-
-def visualize(labeled: np.ndarray) -> np.ndarray:
-    '''
-    labeled: (w, h, c=0~11)
-    '''
-    r = labeled.copy()
-    g = labeled.copy()
-    b = labeled.copy()
-    label_colours = create_label_colors()
-
-    for l in range(0,11):
-        r[labeled==l]=label_colours[l,0]
-        g[labeled==l]=label_colours[l,1]
-        b[labeled==l]=label_colours[l,2]
-
-    rgb = np.zeros((labeled.shape[0], labeled.shape[1], 3))
-    rgb[:,:,0] = (r/255.0)#[:,:,0]
-    rgb[:,:,1] = (g/255.0)#[:,:,1]
-    rgb[:,:,2] = (b/255.0)#[:,:,2]
-    return rgb # (w, h, c)
 
