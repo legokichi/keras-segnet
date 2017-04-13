@@ -1,4 +1,4 @@
-from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized
+from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized, Callable
 
 import argparse
 import time
@@ -42,6 +42,52 @@ from lib import CamVid
 from SegNet import create_segnet
 
 
+def train_iter_gen(train: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
+    return lambda: iterators.MultiprocessIterator(
+        train,
+        batch_size=8,
+        n_prefetch=10
+    )
+
+def valid_iter_gen(valid: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
+    return lambda: iterators.SerialIterator(
+        valid,
+        batch_size=16,
+        #repeat=False,
+        shuffle=False
+    )
+
+def convert_to_keras_batch(iter_gen: Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]], n_classes: int, ignore_labels: List[int]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    iter = iter_gen() # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
+    while True:
+        batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
+        # len(batch) === 16
+        # pair = batch[0] # type: Tuple[np.ndarray, np.ndarray]
+        # img  = pair[0] # type: np.ndarray
+        # mask = pair[1] # type: np.ndarray
+        # img.shape == (3, 360, 480)
+        # mask.shape == (360, 480)
+        # str(img.dtype) == "float32"
+        # str(mask.dtype) == "int32"
+        xs = [np.einsum('chw->whc', x) for (x, _) in batch] # type: List[np.ndarray]
+
+        ys = [] # type: List[np.ndarray]
+        for (_, y) in batch:
+            y = np.einsum('hw->wh', y)
+            # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
+            (w, h) = y.shape # == (480, 360)
+            _y = np.zeros((w, h, n_classes), dtype=np.uint8) # == (480, 360, n_classes)
+            for i in range(w):
+                for j in range(h):
+                    _class = y[i][j]
+                    if _class == -1: # ignore_labels
+                        _class = ignore_labels[0]
+                    _y[i, j, _class] = 1
+            ys.append(_y)
+
+        _xs = np.array(xs) # (n, 480, 360, 3)
+        _ys = np.array(ys) # (n, 480, 360, n_classes)
+        yield (_xs, _ys)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
@@ -69,6 +115,7 @@ if __name__ == '__main__':
         scale=1.0,
         ignore_labels=ignore_labels,
     ) # type: Sized
+
     valid = CamVid(
         # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
         img_dir="data/val",
@@ -79,51 +126,8 @@ if __name__ == '__main__':
         ignore_labels=ignore_labels,
     ) # type: Sized
 
-    train_iter = iterators.MultiprocessIterator(
-        train,
-        batch_size=8,
-        n_prefetch=10
-    ) # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
-    valid_iter = iterators.SerialIterator(
-        valid,
-        batch_size=16,
-        #repeat=False,
-        shuffle=False
-    ) # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
-
-    def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-        while True:
-            batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
-            # len(batch) === 16
-            # pair = batch[0] # type: Tuple[np.ndarray, np.ndarray]
-            # img  = pair[0] # type: np.ndarray
-            # mask = pair[1] # type: np.ndarray
-            # img.shape == (3, 360, 480)
-            # mask.shape == (360, 480)
-            # str(img.dtype) == "float32"
-            # str(mask.dtype) == "int32"
-            xs = [np.einsum('chw->whc', x) for (x, _) in batch] # type: List[np.ndarray]
-
-            ys = [] # type: List[np.ndarray]
-            for (_, y) in batch:
-                y = np.einsum('hw->wh', y)
-                # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
-                (w, h) = y.shape # == (480, 360)
-                _y = np.zeros((w, h, n_classes), dtype=np.uint8) # == (480, 360, n_classes)
-                for i in range(w):
-                    for j in range(h):
-                        _class = y[i][j]
-                        if _class == -1: # ignore_labels
-                            _class = ignore_labels[0]
-                        _y[i, j, _class] = 1
-                ys.append(_y)
-
-            _xs = np.array(xs) # (n, 480, 360, 3)
-            _ys = np.array(ys) # (n, 480, 360, n_classes)
-            yield (_xs, _ys)
-
-    _train_iter = convert_to_keras_batch(train_iter) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-    _valid_iter = convert_to_keras_batch(valid_iter) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+    train_iter = convert_to_keras_batch(train_iter_gen(train), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+    valid_iter = convert_to_keras_batch(valid_iter_gen(valid), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
     
     name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     if indices: name += "_indices"
@@ -160,12 +164,12 @@ if __name__ == '__main__':
         ))
 
         hist = segnet.fit_generator(
-            generator=_train_iter,
+            generator=train_iter,
             steps_per_epoch=len(train),
             epochs=200,
             verbose=1,
             callbacks=callbacks,
-            validation_data=_valid_iter,
+            validation_data=valid_iter,
             validation_steps=len(valid),
             class_weight=class_weight,
             #initial_epoch
