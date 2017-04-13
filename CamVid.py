@@ -46,7 +46,9 @@ def train_iter_gen(train: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray,
     return lambda: iterators.MultiprocessIterator(
         train,
         batch_size=8,
-        n_prefetch=10
+        n_processes=2,
+        n_prefetch=2,
+        #shared_mem=1024*1024*1024*4
     )
 
 def valid_iter_gen(valid: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
@@ -128,9 +130,20 @@ if __name__ == '__main__':
 
     train_iter = convert_to_keras_batch(train_iter_gen(train), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
     valid_iter = convert_to_keras_batch(valid_iter_gen(valid), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-    
+
+    '''
+    print(train_iter.__next__()[0].shape)
+    print(train_iter.__next__()[0].shape)
+    print(train_iter.__next__()[0].shape)
+    print(train_iter.__next__()[0].shape)
+    print(train_iter.__next__()[0].shape)
+
+    exit()
+    '''
+
     name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     if indices: name += "_indices"
+    print("name: ", name)
 
     old_session = KTF.get_session()
     with tf.Graph().as_default():
