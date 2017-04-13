@@ -162,13 +162,14 @@ if __name__ == '__main__':
         segnet.save_weights(name+'_weight.hdf5')
 
         callbacks = [] # type: List[Callback]
-
+        '''
         callbacks.append(ModelCheckpoint(
             name+"weights.{epoch:02d}-{val_loss:.2f}.hdf5",
             verbose=1,
             save_best_only=True,
             save_weights_only=True
         ))
+        '''
         callbacks.append(TensorBoard(
             log_dir=name+'_log',
             histogram_freq=1,
