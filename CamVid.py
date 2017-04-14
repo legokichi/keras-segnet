@@ -43,12 +43,12 @@ from SegNet import create_segnet
 
 
 def train_iter_gen(train: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
-    return lambda: iterators.SerialIterator(
-    #return lambda: iterators.MultiprocessIterator(
+    #return lambda: iterators.SerialIterator(
+    return lambda: iterators.MultiprocessIterator(
         train,
         batch_size=8,
-        #n_processes=2,
-        #n_prefetch=2,
+        n_processes=8,
+        n_prefetch=32,
         #shared_mem=1024*1024*1024*4
     )
 
@@ -161,16 +161,17 @@ if __name__ == '__main__':
 
         with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
         segnet.save_weights(name+'_weight.hdf5')
+        #segnet.load_weights("2017-04-13-10-57-05weights.12-0.47.hdf5")
 
         callbacks = [] # type: List[Callback]
-        '''
+
         callbacks.append(ModelCheckpoint(
             name+"weights.{epoch:02d}-{val_loss:.2f}.hdf5",
             verbose=1,
             save_best_only=True,
-            save_weights_only=True
+            save_weights_only=True,
         ))
-        '''
+
         callbacks.append(TensorBoard(
             log_dir=name+'_log',
             histogram_freq=1,
@@ -187,7 +188,7 @@ if __name__ == '__main__':
             validation_data=valid_iter,
             validation_steps=len(valid),
             class_weight=class_weight,
-            #initial_epoch
+            #initial_epoch=40,
         )
 
         with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
