@@ -43,11 +43,12 @@ from SegNet import create_segnet
 
 
 def train_iter_gen(train: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
-    return lambda: iterators.MultiprocessIterator(
+    return lambda: iterators.SerialIterator(
+    #return lambda: iterators.MultiprocessIterator(
         train,
         batch_size=8,
-        n_processes=2,
-        n_prefetch=2,
+        #n_processes=2,
+        #n_prefetch=2,
         #shared_mem=1024*1024*1024*4
     )
 
