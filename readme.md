@@ -48,6 +48,8 @@ tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
 ```
 
+If learning does not start, memory is not enough so please change MultiprocessIterator to SerialIterator in CamVid.py.
+
 ### resume
 
 ```
