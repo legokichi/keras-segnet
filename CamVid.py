@@ -92,6 +92,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
     parser.add_argument("--indices", action='store_true', help='use indices pooling')
     parser.add_argument("--epochs",  action='store', type=int, default=200, help='epochs')
+    parser.add_argument("--resume",  action='store', type=str, default="", help='*_weights.hdf5')
+    parser.add_argument("--initial_epoch", action='store', type=int, default=0, help='initial_epoch')
     args = parser.parse_args()
 
     indices = args.indices # type: bool
@@ -134,8 +136,8 @@ if __name__ == '__main__':
             train,
             batch_size=8,
             #n_processes=1,
-            #n_prefetch=12,
-            #shared_mem=1024*1024*1024*4
+            #n_prefetch=1,
+            #shared_mem=1000*1000*500
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
@@ -183,6 +185,8 @@ if __name__ == '__main__':
             optimizer=SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True),
             metrics=['accuracy']
         )
+        if len(args.resume) > 0:
+            segnet.load_weights(args.resume)
 
         with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
 
@@ -211,7 +215,7 @@ if __name__ == '__main__':
             validation_data=valid_iter,
             validation_steps=4,
             class_weight=class_weight,
-            #initial_epoch=40,
+            initial_epoch=args.initial_epoch,
         )
 
         with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))

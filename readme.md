@@ -11,6 +11,7 @@ working in progress
 * https://gist.github.com/rdelassus/5b908efd07ae030a2650584e199ff25b/
 * https://github.com/alexgkendall/caffe-segnet
 * https://github.com/alexgkendall/SegNet-Tutorial
+* https://github.com/alexfailure/SegNet/
 
 ## install
 
@@ -45,6 +46,13 @@ env CUDA_VISIBLE_DEVICES=0 python CamVid.py
 env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
 tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
+```
+
+### resume
+
+```
+env CUDA_VISIBLE_DEVICES=0 python CamVid.py --initial_epoch=5 --resume=2017-04-17-08-29-19_weights.epoch0005-val_loss0.43.hdf5 
+env CUDA_VISIBLE_DEVICES=1 python CamVid.py --initial_epoch=5 --resume=2017-04-17-08-31-47_indices_weights.epoch0005-val_loss0.48.hdf5 --indices
 ```
 
 ## predict
