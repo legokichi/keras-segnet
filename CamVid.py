@@ -43,6 +43,7 @@ from lib import CamVid
 
 from SegNet import create_segnet
 
+
 class _CamVid(CamVid):
 
     def __init__(self, n_classes: int, *args, **kwargs):
@@ -196,7 +197,7 @@ if __name__ == '__main__':
             name+"_weights.epoch{epoch:04d}-val_loss{val_loss:.2f}.hdf5",
             verbose=1,
             save_best_only=True,
-            save_weights_only=True
+            save_weights_only=True,
         ))
 
         callbacks.append(TensorBoard(
@@ -215,7 +216,7 @@ if __name__ == '__main__':
             validation_data=valid_iter,
             validation_steps=len(valid),
             class_weight=class_weight,
-            #initial_epoch
+            #initial_epoch=40,
         )
 
         with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
