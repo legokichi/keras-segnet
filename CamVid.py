@@ -52,11 +52,11 @@ class _CamVid(CamVid):
 
     def get_example(self, i) -> Tuple[np.ndarray, np.ndarray] :
         ret = super(CamVid, self).get_example(i) # type: Tuple[np.ndarray, np.ndarray]
+        (x, y) = ret
         assert x.shape == (3, 360, 480)
         assert y.shape == (360, 480)
         assert str(x.dtype) == "float32"
         assert str(y.dtype) == "int32"
-        (x, y) = ret
         _x = np.einsum('chw->whc', x)
         y = np.einsum('hw->wh', y)
         # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
@@ -136,9 +136,7 @@ if __name__ == '__main__':
             n_processes=4,
             n_prefetch=12,
             #shared_mem=1024*1024*1024*4
-        ),
-        n_classes,
-        ignore_labels
+        )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     valid_iter = convert_to_keras_batch(
@@ -147,9 +145,7 @@ if __name__ == '__main__':
             batch_size=16,
             #repeat=False,
             shuffle=False
-        ),
-        n_classes,
-        ignore_labels
+        )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     '''
