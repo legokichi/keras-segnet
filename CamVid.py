@@ -10,7 +10,7 @@ sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/") 
 import cv2
 
 import numpy as np
-#np.random.seed(2017) # for reproducibility
+np.random.seed(2017) # for reproducibility
 
 import os
 #os.environ['KERAS_BACKEND'] = 'theano'
@@ -131,13 +131,13 @@ if __name__ == '__main__':
     ) # type: Sized
 
     train_iter = convert_to_keras_batch(
-        SerialIterator(
-        #MultiprocessIterator(
+        #SerialIterator(
+        MultiprocessIterator(
             train,
             batch_size=8,
-            #n_processes=1,
-            #n_prefetch=1,
-            #shared_mem=1000*1000*500
+            n_processes=2,
+            n_prefetch=4,
+            shared_mem=1000*1000*120
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
