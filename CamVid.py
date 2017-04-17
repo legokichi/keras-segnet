@@ -17,6 +17,7 @@ import os
 #os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
 #os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
 os.environ['KERAS_BACKEND'] = 'tensorflow'
+
 from keras.backend import set_image_data_format
 # keras.backend.backend()
 # keras.backend.set_epsilon(1e-07)
@@ -26,70 +27,65 @@ from keras.backend import set_image_data_format
 # set_image_data_format('channels_first') # theano
 set_image_data_format("channels_last")
 # keras.backend.image_data_format()
+
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import model_from_json
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.optimizers import SGD
-import keras.backend.tensorflow_backend as KTF
+from keras.backend import tensorflow_backend
 
 import tensorflow as tf
 
-from chainer import iterators
+from chainer.iterators import MultiprocessIterator, SerialIterator
 
 sys.path.append("./chainer-segnet")
 from lib import CamVid
 
 from SegNet import create_segnet
 
+class _CamVid(CamVid):
 
-def train_iter_gen(train: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
-    return lambda: iterators.SerialIterator(
-    #return lambda: iterators.MultiprocessIterator(
-        train,
-        batch_size=8,
-        #n_processes=2,
-        #n_prefetch=2,
-        #shared_mem=1024*1024*1024*4
-    )
+    def __init__(self, n_classes: int, *args, **kwargs):
+        self.n_classes = n_classes
+        super().__init__(*args, **kwargs)
 
-def valid_iter_gen(valid: Sized) -> Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]] :
-    return lambda: iterators.SerialIterator(
-        valid,
-        batch_size=16,
-        #repeat=False,
-        shuffle=False
-    )
+    def get_example(self, i) -> Tuple[np.ndarray, np.ndarray] :
+        ret = super(CamVid, self).get_example(i) # type: Tuple[np.ndarray, np.ndarray]
+        assert x.shape == (3, 360, 480)
+        assert y.shape == (360, 480)
+        assert str(x.dtype) == "float32"
+        assert str(y.dtype) == "int32"
+        (x, y) = ret
+        _x = np.einsum('chw->whc', x)
+        y = np.einsum('hw->wh', y)
+        # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
+        (w, h) = y.shape # == (480, 360)
+        _y = np.zeros((w, h, self.n_classes), dtype=np.uint8) # == (480, 360, n_classes)
+        for i in range(w):
+            for j in range(h):
+                _class = y[i][j]
+                if _class == -1: # ignore_labels
+                    _class = self.ignore_labels[0]
+                _y[i, j, _class] = 1
+        assert _x.shape == (480, 360, 3)
+        assert _y.shape == (480, 360)
+        assert str(_x.dtype) == "float32"
+        assert str(_y.dtype) == "uint8"
+        return (_x, _y)
 
-def convert_to_keras_batch(iter_gen: Callable[[], Iterator[List[Tuple[np.ndarray, np.ndarray]]]], n_classes: int, ignore_labels: List[int]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    iter = iter_gen() # type: Iterator[List[Tuple[np.ndarray, np.ndarray]]]
+
+def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    batch_size = 8
+    n_classes = 12
     while True:
         batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
-        # len(batch) === 16
-        # pair = batch[0] # type: Tuple[np.ndarray, np.ndarray]
-        # img  = pair[0] # type: np.ndarray
-        # mask = pair[1] # type: np.ndarray
-        # img.shape == (3, 360, 480)
-        # mask.shape == (360, 480)
-        # str(img.dtype) == "float32"
-        # str(mask.dtype) == "int32"
-        xs = [np.einsum('chw->whc', x) for (x, _) in batch] # type: List[np.ndarray]
-
-        ys = [] # type: List[np.ndarray]
-        for (_, y) in batch:
-            y = np.einsum('hw->wh', y)
-            # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
-            (w, h) = y.shape # == (480, 360)
-            _y = np.zeros((w, h, n_classes), dtype=np.uint8) # == (480, 360, n_classes)
-            for i in range(w):
-                for j in range(h):
-                    _class = y[i][j]
-                    if _class == -1: # ignore_labels
-                        _class = ignore_labels[0]
-                    _y[i, j, _class] = 1
-            ys.append(_y)
-
+        assert len(batch) == batch_size
+        xs = [x for (x, _) in batch] # type: List[np.ndarray]
+        ys = [y for (_, y) in batch] # type: List[np.ndarray]
         _xs = np.array(xs) # (n, 480, 360, 3)
         _ys = np.array(ys) # (n, 480, 360, n_classes)
+        assert _xs.shape == (batch_size, 480, 360, 3)
+        assert _ys.shape == (batch_size, 480, 360, n_classes)
         yield (_xs, _ys)
 
 if __name__ == '__main__':
@@ -97,13 +93,14 @@ if __name__ == '__main__':
     parser.add_argument("--indices", action='store_true', help='use indices pooling')
     args = parser.parse_args()
 
-    indices = args.indices
+    indices = args.indices # type: bool
 
     class_weight = [float(w) for w in open("data/train_freq.csv").readline().split(',')] # type: List[float]
     n_classes = len(class_weight) # type: int
     ignore_labels = [11]
 
-    train = CamVid(
+    train = _CamVid(
+        n_classes=n_classes,
         # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
         img_dir="data/train",
         lbl_dir="data/trainannot",
@@ -119,7 +116,8 @@ if __name__ == '__main__':
         ignore_labels=ignore_labels,
     ) # type: Sized
 
-    valid = CamVid(
+    valid = _CamVid(
+        n_classes=n_classes,
         # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
         img_dir="data/val",
         lbl_dir="data/valannot",
@@ -129,16 +127,41 @@ if __name__ == '__main__':
         ignore_labels=ignore_labels,
     ) # type: Sized
 
-    train_iter = convert_to_keras_batch(train_iter_gen(train), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-    valid_iter = convert_to_keras_batch(valid_iter_gen(valid), n_classes, ignore_labels) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+    train_iter = convert_to_keras_batch(
+        #SerialIterator(
+        MultiprocessIterator(
+            train,
+            batch_size=8,
+            n_processes=4,
+            n_prefetch=12,
+            #shared_mem=1024*1024*1024*4
+        ),
+        n_classes,
+        ignore_labels
+    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
+
+    valid_iter = convert_to_keras_batch(
+        SerialIterator(
+            valid,
+            batch_size=16,
+            #repeat=False,
+            shuffle=False
+        ),
+        n_classes,
+        ignore_labels
+    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     '''
-    print(train_iter.__next__()[0].shape)
-    print(train_iter.__next__()[0].shape)
-    print(train_iter.__next__()[0].shape)
-    print(train_iter.__next__()[0].shape)
-    print(train_iter.__next__()[0].shape)
-
+    print(9, train_iter.__next__()[0].shape)
+    print(8, train_iter.__next__()[0].shape)
+    print(7, train_iter.__next__()[0].shape)
+    print(6, train_iter.__next__()[0].shape)
+    print(5, train_iter.__next__()[0].shape)
+    print(4, train_iter.__next__()[0].shape)
+    print(3, train_iter.__next__()[0].shape)
+    print(2, train_iter.__next__()[0].shape)
+    print(1, train_iter.__next__()[0].shape)
+    print(0, train_iter.__next__()[0].shape)
     exit()
     '''
 
@@ -146,12 +169,7 @@ if __name__ == '__main__':
     if indices: name += "_indices"
     print("name: ", name)
 
-    old_session = KTF.get_session()
     with tf.Graph().as_default():
-        session = tf.Session("")
-        KTF.set_session(session)
-        KTF.set_learning_phase(1)
-
         segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
             loss="categorical_crossentropy",
@@ -159,18 +177,28 @@ if __name__ == '__main__':
             metrics=['accuracy']
         )
 
+    session = tf.Session(
+        config=tf.ConfigProto(
+            intra_op_parallelism_threads=6
+        )
+    )
+    old_session = tensorflow_backend.get_session()
+    
+    with session.as_default():
+        tensorflow_backend.set_session(session)
+        tensorflow_backend.set_learning_phase(1)
+
         with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
-        segnet.save_weights(name+'_weight.hdf5')
 
         callbacks = [] # type: List[Callback]
-        '''
+
         callbacks.append(ModelCheckpoint(
-            name+"weights.{epoch:02d}-{val_loss:.2f}.hdf5",
+            name+"_weights.epoch{epoch:04d}-val_loss{val_loss:.2f}.hdf5",
             verbose=1,
             save_best_only=True,
             save_weights_only=True
         ))
-        '''
+
         callbacks.append(TensorBoard(
             log_dir=name+'_log',
             histogram_freq=1,
@@ -191,11 +219,11 @@ if __name__ == '__main__':
         )
 
         with open(name+'_history.json', 'w') as f: f.write(repr(hist.history))
+        segnet.save_weights(name+'_weight.hdf5')
 
-    KTF.set_session(old_session)
+    tensorflow_backend.set_session(old_session)
 
     exit()
-
 
 exit()
 
