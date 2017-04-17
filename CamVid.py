@@ -10,7 +10,7 @@ sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/") 
 import cv2
 
 import numpy as np
-np.random.seed(2017) # for reproducibility
+#np.random.seed(2017) # for reproducibility
 
 import os
 #os.environ['KERAS_BACKEND'] = 'theano'
@@ -28,7 +28,6 @@ from keras.backend import set_image_data_format
 set_image_data_format("channels_last")
 # keras.backend.image_data_format()
 
-from keras.preprocessing.image import ImageDataGenerator
 from keras.models import model_from_json
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.optimizers import SGD
@@ -51,7 +50,7 @@ class _CamVid(CamVid):
         super().__init__(*args, **kwargs)
 
     def get_example(self, i) -> Tuple[np.ndarray, np.ndarray] :
-        ret = super(CamVid, self).get_example(i) # type: Tuple[np.ndarray, np.ndarray]
+        ret = CamVid.get_example(self, i) # type: Tuple[np.ndarray, np.ndarray]
         (x, y) = ret
         assert x.shape == (3, 360, 480)
         assert y.shape == (360, 480)
@@ -60,7 +59,7 @@ class _CamVid(CamVid):
         _x = np.einsum('chw->whc', x)
         y = np.einsum('hw->wh', y)
         # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
-        (w, h) = y.shape # == (480, 360)
+        (w, h) = y.shape
         _y = np.zeros((w, h, self.n_classes), dtype=np.uint8) # == (480, 360, n_classes)
         for i in range(w):
             for j in range(h):
@@ -69,7 +68,7 @@ class _CamVid(CamVid):
                     _class = self.ignore_labels[0]
                 _y[i, j, _class] = 1
         assert _x.shape == (480, 360, 3)
-        assert _y.shape == (480, 360)
+        assert _y.shape == (480, 360, 12)
         assert str(_x.dtype) == "float32"
         assert str(_y.dtype) == "uint8"
         return (_x, _y)
@@ -92,6 +91,7 @@ def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
     parser.add_argument("--indices", action='store_true', help='use indices pooling')
+    parser.add_argument("--epochs",  action='store', type=int, default=200, help='epochs')
     args = parser.parse_args()
 
     indices = args.indices # type: bool
@@ -129,22 +129,26 @@ if __name__ == '__main__':
     ) # type: Sized
 
     train_iter = convert_to_keras_batch(
-        #SerialIterator(
-        MultiprocessIterator(
+        SerialIterator(
+        #MultiprocessIterator(
             train,
             batch_size=8,
-            n_processes=4,
-            n_prefetch=12,
+            #n_processes=1,
+            #n_prefetch=12,
             #shared_mem=1024*1024*1024*4
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     valid_iter = convert_to_keras_batch(
         SerialIterator(
+        #MultiprocessIterator(
             valid,
-            batch_size=16,
+            batch_size=8,
             #repeat=False,
-            shuffle=False
+            shuffle=False,
+            #n_processes=1,
+            #n_prefetch=2,
+            #shared_mem=1024*1024*1024*4
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
@@ -166,24 +170,19 @@ if __name__ == '__main__':
     if indices: name += "_indices"
     print("name: ", name)
 
+    old_session = tensorflow_backend.get_session()
+
     with tf.Graph().as_default():
+        session = tf.Session("")
+        tensorflow_backend.set_session(session)
+        tensorflow_backend.set_learning_phase(1)
+
         segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
             loss="categorical_crossentropy",
             optimizer=SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True),
             metrics=['accuracy']
         )
-
-    session = tf.Session(
-        config=tf.ConfigProto(
-            intra_op_parallelism_threads=6
-        )
-    )
-    old_session = tensorflow_backend.get_session()
-    
-    with session.as_default():
-        tensorflow_backend.set_session(session)
-        tensorflow_backend.set_learning_phase(1)
 
         with open(name+'_model.json', 'w') as f: f.write(segnet.to_json())
 
@@ -199,18 +198,18 @@ if __name__ == '__main__':
         callbacks.append(TensorBoard(
             log_dir=name+'_log',
             histogram_freq=1,
-            write_graph=True,
-            write_images=True
+            write_graph=False,
+            write_images=False,
         ))
 
         hist = segnet.fit_generator(
             generator=train_iter,
             steps_per_epoch=len(train),
-            epochs=200,
+            epochs=args.epochs,
             verbose=1,
             callbacks=callbacks,
             validation_data=valid_iter,
-            validation_steps=len(valid),
+            validation_steps=4,
             class_weight=class_weight,
             #initial_epoch=40,
         )
@@ -220,7 +219,15 @@ if __name__ == '__main__':
 
     tensorflow_backend.set_session(old_session)
 
-    exit()
+    print("entering repl")
+    global loop
+    loop = True
+    while loop:
+        try:
+            exec(input("> "))
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+    print("finish")
 
 exit()
 
