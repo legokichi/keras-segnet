@@ -40,6 +40,7 @@ python SegNet.py
 ## train
 
 ```
+source download_camvid.sh
 env CUDA_VISIBLE_DEVICES=0 python CamVid.py
 env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
 tensorboard --port=8888 --logdir=log
