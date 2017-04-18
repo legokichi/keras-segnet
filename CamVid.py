@@ -61,12 +61,18 @@ class _CamVid(CamVid):
         # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
         (w, h) = y.shape
         _y = np.zeros((w, h, self.n_classes), dtype=np.uint8) # == (480, 360, n_classes)
+        for i in range(n_classes):
+            _y[:,:,i] = (y == i).astype("uint8")
+        if len(self.ignore_labels) > 0:
+            _y[:,:,self.ignore_labels[0]] = (y == -1).astype("uint8") # ignore_labels
+        '''
         for i in range(w):
             for j in range(h):
                 _class = y[i][j]
                 if _class == -1: # ignore_labels
                     _class = self.ignore_labels[0]
                 _y[i, j, _class] = 1
+        '''
         assert _x.shape == (480, 360, 3)
         assert _y.shape == (480, 360, 12)
         assert str(_x.dtype) == "float32"
