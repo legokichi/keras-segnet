@@ -61,7 +61,7 @@ def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tM
     #encoder.summary()
 
     L = [layer for i, layer in enumerate(encoder.layers) ] # type: List[Layer]
-    for layer in L: layer.trainable = False # freeze VGG16
+    #for layer in L: layer.trainable = False # freeze VGG16
     L.reverse()
 
     x = encoder.output

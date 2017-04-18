@@ -150,15 +150,15 @@ if __name__ == '__main__':
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     valid_iter = convert_to_keras_batch(
-        SerialIterator(
-        #MultiprocessIterator(
+        #SerialIterator(
+        MultiprocessIterator(
             valid,
             batch_size=8,
             #repeat=False,
             shuffle=False,
-            #n_processes=1,
-            #n_prefetch=2,
-            #shared_mem=1024*1024*1024*4
+            n_processes=2,
+            n_prefetch=2,
+            shared_mem=1000*1000*5
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
@@ -192,7 +192,7 @@ if __name__ == '__main__':
         segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
             loss="categorical_crossentropy",
-            optimizer=SGD(lr=0.01, momentum=0.8, decay=1e-6, nesterov=True),
+            optimizer=SGD(lr=0.01, momentum=0.9, decay=0.0005, nesterov=True),
             metrics=['accuracy']
         )
         if len(args.resume) > 0:
@@ -205,8 +205,9 @@ if __name__ == '__main__':
         callbacks.append(ModelCheckpoint(
             name+"_weights.epoch{epoch:04d}-val_loss{val_loss:.2f}.hdf5",
             verbose=1,
-            save_best_only=True,
+            #save_best_only=True,
             save_weights_only=True,
+            period=5,
         ))
 
         callbacks.append(TensorBoard(
@@ -223,7 +224,7 @@ if __name__ == '__main__':
             verbose=1,
             callbacks=callbacks,
             validation_data=valid_iter,
-            validation_steps=4,
+            validation_steps=len(valid),
             class_weight=class_weight,
             initial_epoch=args.initial_epoch,
         )
