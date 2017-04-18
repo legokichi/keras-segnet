@@ -1,5 +1,7 @@
 from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized, Callable
 
+import cProfile
+import pstats
 import argparse
 import time
 import random
@@ -135,15 +137,15 @@ if __name__ == '__main__':
         std="data/train_std.npy",
         ignore_labels=ignore_labels,
     ) # type: Sized
-
+    
     train_iter = convert_to_keras_batch(
         #SerialIterator(
         MultiprocessIterator(
             train,
             batch_size=8,
             n_processes=2,
-            n_prefetch=4,
-            shared_mem=1000*1000*120
+            n_prefetch=2,
+            shared_mem=1000*1000*5
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
@@ -161,16 +163,18 @@ if __name__ == '__main__':
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     '''
-    print(9, train_iter.__next__()[0].shape)
-    print(8, train_iter.__next__()[0].shape)
-    print(7, train_iter.__next__()[0].shape)
-    print(6, train_iter.__next__()[0].shape)
-    print(5, train_iter.__next__()[0].shape)
-    print(4, train_iter.__next__()[0].shape)
-    print(3, train_iter.__next__()[0].shape)
-    print(2, train_iter.__next__()[0].shape)
-    print(1, train_iter.__next__()[0].shape)
-    print(0, train_iter.__next__()[0].shape)
+    def main():
+        start = time.time()
+        for i in range(100):
+            train_iter.__next__()
+            time.sleep(1)
+        end = time.time()
+        print('%30s' % 'serial in ', str((end - start)*1000), 'ms')
+
+    cProfile.run("main()", filename="main.prof")
+    sts = pstats.Stats("main.prof")
+    sts.strip_dirs().sort_stats("cumulative").print_stats()
+
     exit()
     '''
 
