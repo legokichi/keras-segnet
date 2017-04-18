@@ -4,3 +4,6 @@
 [submodule "chainer-segnet"]
 	path = chainer-segnet
 	url = https://github.com/pfnet-research/chainer-segnet.git
+[submodule "pascal-voc-python"]
+	path = pascal-voc-python
+	url = https://github.com/mprat/pascal-voc-python.git
