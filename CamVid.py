@@ -32,7 +32,7 @@ set_image_data_format("channels_last")
 
 from keras.models import model_from_json
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
-from keras.optimizers import SGD
+from keras.optimizers import SGD, Adam
 from keras.backend import tensorflow_backend
 
 import tensorflow as tf
@@ -191,9 +191,11 @@ if __name__ == '__main__':
 
         segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
-            loss="categorical_crossentropy",
-            optimizer=SGD(lr=0.01, momentum=0.9, decay=0.0005, nesterov=True),
-            metrics=['accuracy']
+            #optimizer=SGD(lr=0.01, momentum=0.9, decay=0.0005, nesterov=True),
+            optimizer=Adam(lr=0.0001, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0),
+            loss="mean_absolute_error", # l1 loss?
+            metrics=['accuracy'],
+            loss_weights=[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
         )
         if len(args.resume) > 0:
             segnet.load_weights(args.resume)
