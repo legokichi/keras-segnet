@@ -47,6 +47,17 @@ from unet import create_unet
 from CamVid import get_iter as get_camvid
 from mscoco import get_iter as get_coco
 
+def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
+    while True:
+        batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
+        xs = [x for (x, _) in batch] # type: List[np.ndarray]
+        ys = [y for (_, y) in batch] # type: List[np.ndarray]
+        _xs = np.array(xs) # (n, 480, 360, 3)
+        _ys = np.array(ys) # (n, 480, 360, n_classes)
+        yield (_xs, _ys)
+
+
+
 def dice_coef(y_true, y_pred):
     y_true = K.flatten(y_true)
     y_pred = K.flatten(y_pred)
@@ -70,9 +81,34 @@ if __name__ == '__main__':
     else: resize_shape = None
 
     if args.coco:
-      train_iter, valid_iter = get_coco(resize_shape)
+      train, valid = get_coco(resize_shape)
     else:
-      train_iter, valid_iter = get_camvid(resize_shape)
+      train, valid = get_camvid(resize_shape)
+
+    train_iter = convert_to_keras_batch(
+        #SerialIterator(
+        MultiprocessIterator(
+            train,
+            batch_size=8,
+            n_processes=4,
+            n_prefetch=4,
+            shared_mem=1000*1000*5
+        )
+    )
+
+
+    valid_iter = convert_to_keras_batch(
+        #SerialIterator(
+        MultiprocessIterator(
+            valid,
+            batch_size=8,
+            #repeat=False,
+            shuffle=False,
+            n_processes=4,
+            n_prefetch=4,
+            shared_mem=1000*1000*5
+        )
+    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
     
     name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 

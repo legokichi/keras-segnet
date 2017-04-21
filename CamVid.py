@@ -51,22 +51,7 @@ class _CamVid(CamVid):
         return (_x, _y)
 
 
-def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    #batch_size = 8
-    #n_classes = 12
-    while True:
-        batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
-        #assert len(batch) == batch_size
-        xs = [x for (x, _) in batch] # type: List[np.ndarray]
-        ys = [y for (_, y) in batch] # type: List[np.ndarray]
-        _xs = np.array(xs) # (n, 480, 360, 3)
-        _ys = np.array(ys) # (n, 480, 360, n_classes)
-        #assert _xs.shape == (batch_size, 480, 360, 3)
-        #assert _ys.shape == (batch_size, 480, 360, n_classes)
-        yield (_xs, _ys)
-
-
-def get_iter(resize_shape=None)-> Tuple[Iterator[Tuple[np.ndarray, np.ndarray]], Iterator[Tuple[np.ndarray, np.ndarray]]]:
+def get_iter(resize_shape=None):
 
     class_weight = [float(w) for w in open("data/train_freq.csv").readline().split(',')] # type: List[float]
     n_classes = len(class_weight) # type: int
@@ -102,33 +87,10 @@ def get_iter(resize_shape=None)-> Tuple[Iterator[Tuple[np.ndarray, np.ndarray]],
         ignore_labels=ignore_labels,
     ) # type: Sized
     
-    train_iter = convert_to_keras_batch(
-        #SerialIterator(
-        MultiprocessIterator(
-            train,
-            batch_size=8,
-            n_processes=2,
-            n_prefetch=2,
-            shared_mem=1000*1000*5
-        )
-    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-
-    valid_iter = convert_to_keras_batch(
-        #SerialIterator(
-        MultiprocessIterator(
-            valid,
-            batch_size=8,
-            #repeat=False,
-            shuffle=False,
-            n_processes=2,
-            n_prefetch=2,
-            shared_mem=1000*1000*5
-        )
-    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-
-    return (train_iter, valid_iter)
+    return (train, valid)
 
 if __name__ == '__main__':
+    '''
     train_iter = get_iter()
     def main():
         start = time.time()
@@ -143,3 +105,4 @@ if __name__ == '__main__':
     sts.strip_dirs().sort_stats("cumulative").print_stats()
 
     exit()
+    '''

@@ -55,17 +55,8 @@ def load_img(coco, imgInfo: dict) -> Tuple[np.ndarray, np.ndarray]:
     return (img, mask_all)
 
 
-def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    while True:
-        batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
-        xs = [x for (x, _) in batch] # type: List[np.ndarray]
-        ys = [y for (_, y) in batch] # type: List[np.ndarray]
-        _xs = np.array(xs) # (n, 480, 360, 3)
-        _ys = np.array(ys) # (n, 480, 360, n_classes)
-        yield (_xs, _ys)
 
-
-def get_iter(resize_shape=None)-> Tuple[Iterator[Tuple[np.ndarray, np.ndarray]], Iterator[Tuple[np.ndarray, np.ndarray]]]:
+def get_iter(resize_shape=None):
 
     coco = COCO("./annotations/instances_train2014.json")
 
@@ -83,29 +74,4 @@ def get_iter(resize_shape=None)-> Tuple[Iterator[Tuple[np.ndarray, np.ndarray]],
         ),
     ]).to_deterministic() # type: iaa.Sequential
 
-    train_iter = convert_to_keras_batch(
-        #SerialIterator(
-        MultiprocessIterator(
-            CamVid(coco, resize_shape),
-            batch_size=8,
-            n_processes=4,
-            n_prefetch=4,
-            shared_mem=1000*1000*5
-        )
-    )
-
-
-    valid_iter = convert_to_keras_batch(
-        #SerialIterator(
-        MultiprocessIterator(
-            CamVid(coco, resize_shape),
-            batch_size=8,
-            #repeat=False,
-            shuffle=False,
-            n_processes=4,
-            n_prefetch=4,
-            shared_mem=1000*1000*5
-        )
-    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
-
-    return train_iter, valid_iter
+    return CamVid(coco, resize_shape), CamVid(coco, resize_shape)
