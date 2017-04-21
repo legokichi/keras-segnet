@@ -24,12 +24,14 @@ pip install tensorflow-gpu
 pip install keras
 pip install mypy
 pip install pydot_ng
+pip install imgaug
+
 ```
 
 ## type check
 
 ```
-mypy --ignore-missing-imports CamVid.py 
+mypy --ignore-missing-imports train.py 
 ```
 
 ## show model
@@ -42,20 +44,21 @@ python SegNet.py
 
 ```
 source download_camvid.sh
-env CUDA_VISIBLE_DEVICES=0 python CamVid.py
-env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
-env CUDA_VISIBLE_DEVICES=0 python CamVid.py --unet
+source download_mscoco.sh
+env CUDA_VISIBLE_DEVICES=0 python train.py
+env CUDA_VISIBLE_DEVICES=1 python train.py --indices
+env CUDA_VISIBLE_DEVICES=0 python train.py --unet --coco
 tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
 ```
 
-If learning does not start, memory is not enough so please change MultiprocessIterator to SerialIterator in CamVid.py.
+If learning does not start, memory is not enough so please change MultiprocessIterator to SerialIterator in CamVid.py or mscoco.py.
 
 ### resume
 
 ```
-env CUDA_VISIBLE_DEVICES=0 python CamVid.py --initial_epoch=5 --resume=2017-04-17-08-29-19_weights.epoch0005-val_loss0.43.hdf5 
-env CUDA_VISIBLE_DEVICES=1 python CamVid.py --initial_epoch=5 --resume=2017-04-17-08-31-47_indices_weights.epoch0005-val_loss0.48.hdf5 --indices
+env CUDA_VISIBLE_DEVICES=0 python train.py --initial_epoch=5 --resume=2017-04-17-08-29-19_weights.epoch0005-val_loss0.43.hdf5 
+env CUDA_VISIBLE_DEVICES=1 python train.py --initial_epoch=5 --resume=2017-04-17-08-31-47_indices_weights.epoch0005-val_loss0.48.hdf5 --indices
 ```
 
 ## predict
