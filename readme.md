@@ -44,6 +44,7 @@ python SegNet.py
 source download_camvid.sh
 env CUDA_VISIBLE_DEVICES=0 python CamVid.py
 env CUDA_VISIBLE_DEVICES=1 python CamVid.py --indices
+env CUDA_VISIBLE_DEVICES=0 python CamVid.py --unet
 tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
 ```
