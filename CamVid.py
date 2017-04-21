@@ -43,7 +43,7 @@ sys.path.append("./chainer-segnet")
 from lib import CamVid
 
 from SegNet import create_segnet
-
+from unet import create_unet
 
 class _CamVid(CamVid):
 
@@ -67,14 +67,6 @@ class _CamVid(CamVid):
             _y[:,:,i] = (y == i).astype("uint8")
         if len(self.ignore_labels) > 0:
             _y[:,:,self.ignore_labels[0]] = (y == -1).astype("uint8") # ignore_labels
-        '''
-        for i in range(w):
-            for j in range(h):
-                _class = y[i][j]
-                if _class == -1: # ignore_labels
-                    _class = self.ignore_labels[0]
-                _y[i, j, _class] = 1
-        '''
         assert _x.shape == (480, 360, 3)
         assert _y.shape == (480, 360, 12)
         assert str(_x.dtype) == "float32"
@@ -102,6 +94,7 @@ if __name__ == '__main__':
     parser.add_argument("--epochs",  action='store', type=int, default=200, help='epochs')
     parser.add_argument("--resume",  action='store', type=str, default="", help='*_weights.hdf5')
     parser.add_argument("--initial_epoch", action='store', type=int, default=0, help='initial_epoch')
+    parser.add_argument("--unet", action='store', type=int, default=0, help='use u-net')
     args = parser.parse_args()
 
     indices = args.indices # type: bool
@@ -179,7 +172,8 @@ if __name__ == '__main__':
     '''
 
     name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    if indices: name += "_indices"
+    if args.unet: name += "_unet"
+    elif indices: name += "_indices"
     print("name: ", name)
 
     old_session = tensorflow_backend.get_session()
@@ -188,8 +182,8 @@ if __name__ == '__main__':
         session = tf.Session("")
         tensorflow_backend.set_session(session)
         tensorflow_backend.set_learning_phase(1)
-
-        segnet = create_segnet((480, 360, 3), n_classes, indices)
+        if args.unet: segnet = create_unet((480, 360, 3), (480, 360, 12), 128)
+        else: segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
             #optimizer=SGD(lr=0.01, momentum=0.9, decay=0.0005, nesterov=True),
             optimizer=Adam(lr=0.0001, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0),
