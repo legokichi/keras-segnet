@@ -90,8 +90,8 @@ if __name__ == '__main__':
         MultiprocessIterator(
             train,
             batch_size=8,
-            n_processes=4,
-            n_prefetch=4,
+            n_processes=12,
+            n_prefetch=120,
             shared_mem=1000*1000*5
         )
     )
@@ -104,8 +104,8 @@ if __name__ == '__main__':
             batch_size=8,
             #repeat=False,
             shuffle=False,
-            n_processes=4,
-            n_prefetch=4,
+            n_processes=12,
+            n_prefetch=120,
             shared_mem=1000*1000*5
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
@@ -125,7 +125,7 @@ if __name__ == '__main__':
         tensorflow_backend.set_session(session)
         tensorflow_backend.set_learning_phase(1)
 
-        if args.unet: segnet = create_unet((256, 256, 3), (256, 256, 12), 128)
+        if args.unet: segnet = create_unet((256, 256, 3), (256, 256, 2), 128)
         else: n_classes = 12; segnet = create_segnet((480, 360, 3), n_classes, args.indices)
         
         segnet.compile(
