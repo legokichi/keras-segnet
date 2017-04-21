@@ -34,7 +34,7 @@ from keras.models import model_from_json
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.optimizers import SGD, Adam
 from keras.backend import tensorflow_backend
-
+import keras.backend as K
 import tensorflow as tf
 
 from chainer.iterators import MultiprocessIterator, SerialIterator
@@ -47,8 +47,9 @@ from unet import create_unet
 
 class _CamVid(CamVid):
 
-    def __init__(self, n_classes: int, *args, **kwargs):
+    def __init__(self, n_classes: int, resize_shape=None, *args, **kwargs):
         self.n_classes = n_classes
+        self.resize_shape = resize_shape
         super().__init__(*args, **kwargs)
 
     def get_example(self, i) -> Tuple[np.ndarray, np.ndarray] :
@@ -71,22 +72,34 @@ class _CamVid(CamVid):
         assert _y.shape == (480, 360, 12)
         assert str(_x.dtype) == "float32"
         assert str(_y.dtype) == "uint8"
+        if self.resize_shape != None:
+            _x = cv2.resize(_x, self.resize_shape)
+            _y = cv2.resize(_y, self.resize_shape)
         return (_x, _y)
 
 
 def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
-    batch_size = 8
-    n_classes = 12
+    #batch_size = 8
+    #n_classes = 12
     while True:
         batch = iter.__next__() # type: List[Tuple[np.ndarray, np.ndarray]]
-        assert len(batch) == batch_size
+        #assert len(batch) == batch_size
         xs = [x for (x, _) in batch] # type: List[np.ndarray]
         ys = [y for (_, y) in batch] # type: List[np.ndarray]
         _xs = np.array(xs) # (n, 480, 360, 3)
         _ys = np.array(ys) # (n, 480, 360, n_classes)
-        assert _xs.shape == (batch_size, 480, 360, 3)
-        assert _ys.shape == (batch_size, 480, 360, n_classes)
+        #assert _xs.shape == (batch_size, 480, 360, 3)
+        #assert _ys.shape == (batch_size, 480, 360, n_classes)
         yield (_xs, _ys)
+
+def dice_coef(y_true, y_pred):
+    y_true = K.flatten(y_true)
+    y_pred = K.flatten(y_pred)
+    intersection = K.sum(y_true * y_pred)
+    return (2. * intersection + 1) / (K.sum(y_true) + K.sum(y_pred) + 1)
+
+def dice_coef_loss(y_true, y_pred):
+    return -dice_coef(y_true, y_pred)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
@@ -102,9 +115,12 @@ if __name__ == '__main__':
     class_weight = [float(w) for w in open("data/train_freq.csv").readline().split(',')] # type: List[float]
     n_classes = len(class_weight) # type: int
     ignore_labels = [11]
-
+    if args.unet: resize_shape = (256, 256)
+    else: resize_shape = None
+    
     train = _CamVid(
         n_classes=n_classes,
+        resize_shape=resize_shape,
         # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
         img_dir="data/train",
         lbl_dir="data/trainannot",
@@ -122,6 +138,7 @@ if __name__ == '__main__':
 
     valid = _CamVid(
         n_classes=n_classes,
+        resize_shape=resize_shape,
         # https://github.com/pfnet-research/chainer-segnet/blob/master/lib/cmd_options.py
         img_dir="data/val",
         lbl_dir="data/valannot",
@@ -182,12 +199,13 @@ if __name__ == '__main__':
         session = tf.Session("")
         tensorflow_backend.set_session(session)
         tensorflow_backend.set_learning_phase(1)
-        if args.unet: segnet = create_unet((480, 360, 3), (480, 360, 12), 128)
+        if args.unet: segnet = create_unet((256, 256, 3), (256, 256, 12), 128)
         else: segnet = create_segnet((480, 360, 3), n_classes, indices)
         segnet.compile(
             #optimizer=SGD(lr=0.01, momentum=0.9, decay=0.0005, nesterov=True),
             optimizer=Adam(lr=0.0001, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0),
-            loss="mean_absolute_error", # l1 loss?
+            #loss="mean_absolute_error", # l1 loss?
+            loss=dice_coef_loss,
             metrics=['accuracy'],
             #loss_weights=[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
         )
