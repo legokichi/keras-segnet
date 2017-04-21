@@ -146,7 +146,7 @@ if __name__ == '__main__':
         #SerialIterator(
         MultiprocessIterator(
             valid,
-            batch_size=8,
+            batch_size=16,
             #repeat=False,
             shuffle=False,
             n_processes=2,
@@ -189,7 +189,7 @@ if __name__ == '__main__':
             optimizer=Adam(lr=0.0001, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0),
             loss="mean_absolute_error", # l1 loss?
             metrics=['accuracy'],
-            loss_weights=[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
+            #loss_weights=[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
         )
         if len(args.resume) > 0:
             segnet.load_weights(args.resume)
@@ -220,7 +220,7 @@ if __name__ == '__main__':
             verbose=1,
             callbacks=callbacks,
             validation_data=valid_iter,
-            validation_steps=len(valid),
+            validation_steps=2,
             class_weight=class_weight,
             initial_epoch=args.initial_epoch,
         )
