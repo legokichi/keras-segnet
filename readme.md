@@ -63,7 +63,10 @@ env CUDA_VISIBLE_DEVICES=1 python CamVid.py --initial_epoch=5 --resume=2017-04-1
 working in progress
 
 ## model
+### segnet
 
 ![segnet](https://raw.githubusercontent.com/legokichi/keras-segnet/master/segnet.png)
 
+### u-net
 
+![u-net](https://raw.githubusercontent.com/legokichi/keras-segnet/master/unet.png)
