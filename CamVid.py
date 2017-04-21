@@ -94,7 +94,7 @@ if __name__ == '__main__':
     parser.add_argument("--epochs",  action='store', type=int, default=200, help='epochs')
     parser.add_argument("--resume",  action='store', type=str, default="", help='*_weights.hdf5')
     parser.add_argument("--initial_epoch", action='store', type=int, default=0, help='initial_epoch')
-    parser.add_argument("--unet", action='store', type=int, default=0, help='use u-net')
+    parser.add_argument("--unet", action='store_true', help='use u-net')
     args = parser.parse_args()
 
     indices = args.indices # type: bool
@@ -146,7 +146,7 @@ if __name__ == '__main__':
         #SerialIterator(
         MultiprocessIterator(
             valid,
-            batch_size=16,
+            batch_size=8,
             #repeat=False,
             shuffle=False,
             n_processes=2,
