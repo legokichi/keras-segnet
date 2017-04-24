@@ -45,10 +45,13 @@ class _CamVid(CamVid):
         assert _y.shape == (480, 360, 12)
         assert str(_x.dtype) == "float32"
         assert str(_y.dtype) == "uint8"
+        mask = np.zeros((_y.shape[0], _y.shape[1], 2), np.uint8)
+        mask[:,:,0] = _y[:,:,9] + _y[:,:,10] # Pedestrian + Bicyclist
         if self.resize_shape != None:
             _x = cv2.resize(_x, self.resize_shape)
             _y = cv2.resize(_y, self.resize_shape)
-        return (_x, _y)
+        mask[:,:,0] = mask[:,:,0]>0
+        return (_x, mask)
 
 
 def get_iter(resize_shape=None):

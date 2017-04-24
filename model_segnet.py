@@ -113,5 +113,5 @@ if __name__ == '__main__':
     segnet = create_segnet((480, 360, 3), 12, indices=False, ker_init="he_normal")
     segnet.summary()
     plot_model(segnet, to_file='segnet.png', show_shapes=True, show_layer_names=True)
-    with open('segnet_model.json', 'w') as f: f.write(segnet.to_json())
+    #with open('segnet_model.json', 'w') as f: f.write(segnet.to_json())
     exit()
