@@ -48,6 +48,7 @@ source download_mscoco.sh
 env CUDA_VISIBLE_DEVICES=0 python train.py
 env CUDA_VISIBLE_DEVICES=1 python train.py --indices
 env CUDA_VISIBLE_DEVICES=0 python train.py --unet --coco
+env CUDA_VISIBLE_DEVICES=0 python train.py --unet --coco --ker_init="he_normal" --lr=0.001 --optimizer=nesterov
 tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
 ```

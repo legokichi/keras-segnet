@@ -30,7 +30,7 @@ class CamVid(dataset_mixin.DatasetMixin):
         return len(self.infos)
     def get_example(self, i):
         info = self.infos[i]
-        img, mask = load_img(self.coco, info)
+        img, mask = load_img(self.coco, self.path, info)
         if self.seq != None:
             img = np.expand_dims(img, axis=0)
             mask = np.expand_dims(mask, axis=0)
@@ -44,8 +44,8 @@ class CamVid(dataset_mixin.DatasetMixin):
         mask[:,:,0] = mask[:,:,0]>0
         return (img, mask)
 
-def load_img(coco, imgInfo: dict) -> Tuple[np.ndarray, np.ndarray]:
-    img = io.imread(self.path +imgInfo['file_name'])
+def load_img(coco, path: str, imgInfo: dict) -> Tuple[np.ndarray, np.ndarray]:
+    img = io.imread(path +imgInfo['file_name'])
     if img.ndim != 3:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
