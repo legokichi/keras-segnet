@@ -25,6 +25,9 @@ class CamVid(dataset_mixin.DatasetMixin):
         self.coco = coco
         self.infos = coco.loadImgs(coco.getImgIds(catIds=coco.getCatIds(catNms=['person']))) # type: List[dict]
         self.seq = seq
+        self.seq_norm = iaa.Sequential([
+            iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5)
+        ])
         self.path = path
     def __len__(self):
         return len(self.infos)
@@ -35,6 +38,7 @@ class CamVid(dataset_mixin.DatasetMixin):
             img = np.expand_dims(img, axis=0)
             mask = np.expand_dims(mask, axis=0)
             img = self.seq.augment_images(img)
+            img = self.seq_norm.augment_images(img)
             mask = self.seq.augment_images(mask)
             img = np.squeeze(img)
             mask = np.squeeze(mask)
@@ -68,9 +72,7 @@ def get_iter(resize_shape=None):
     coco_val = COCO("./annotations/instances_val2014.json")
 
     seq = iaa.Sequential([
-    #'''
         iaa.Fliplr(0.5),
-        #iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5),
         iaa.Affine(
                 scale={"x": (0.8, 1.2), "y": (0.8, 1.2)}, # scale images to 80-120% of their size, individually per axis
                 translate_px={"x": (-16, 16), "y": (-16, 16)}, # translate by -16 to +16 pixels (per axis)
@@ -80,7 +82,6 @@ def get_iter(resize_shape=None):
                 #cval=(0, 255), # if mode is constant, use a cval between 0 and 255
                 mode="wrap" # use any of scikit-image's warping modes (see 2nd image from the top for examples)
         ),
-    #'''
     ]).to_deterministic() # type: iaa.Sequential
 
     return CamVid(coco_train, "train2014/", seq, resize_shape), CamVid(coco_val, "val2014/", resize_shape)

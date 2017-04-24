@@ -122,7 +122,7 @@ if __name__ == '__main__':
     elif args.indices: name += "_indices"
     if args.coco: name += "_coco"
     
-    name += "_fil" + args.filters
+    name += "_fil" + str(args.filters)
     name += "_" + args.loss
     name += "_" + args.optimizer
     name += "_lr" + str(args.lr)

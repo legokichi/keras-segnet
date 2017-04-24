@@ -33,6 +33,7 @@ class _CamVid(CamVid):
         assert str(x.dtype) == "float32"
         assert str(y.dtype) == "int32"
         _x = np.einsum('chw->whc', x)
+        _x = cv2.cvtColor(_x, cv2.COLOR_BGR2RGB)
         y = np.einsum('hw->wh', y)
         # https://github.com/pradyu1993/segnet/blob/master/segnet.py#L50
         (w, h) = y.shape
@@ -41,10 +42,10 @@ class _CamVid(CamVid):
             _y[:,:,i] = (y == i).astype("uint8")
         if len(self.ignore_labels) > 0:
             _y[:,:,self.ignore_labels[0]] = (y == -1).astype("uint8") # ignore_labels
-        assert _x.shape == (480, 360, 3)
-        assert _y.shape == (480, 360, 12)
-        assert str(_x.dtype) == "float32"
-        assert str(_y.dtype) == "uint8"
+        #assert _x.shape == (480, 360, 3)
+        #assert _y.shape == (480, 360, 12)
+        #assert str(_x.dtype) == "float32"
+        #assert str(_y.dtype) == "uint8"
         mask = np.zeros((_y.shape[0], _y.shape[1], 2), np.uint8)
         mask[:,:,0] = _y[:,:,9] + _y[:,:,10] # Pedestrian + Bicyclist
         if self.resize_shape != None:
