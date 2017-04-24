@@ -20,11 +20,12 @@ from pycocotools import mask
 
 
 class CamVid(dataset_mixin.DatasetMixin):
-    def __init__(self, coco, seq=None, resize_shape=None):
+    def __init__(self, coco, path, seq=None, resize_shape=None):
         self.resize_shape = resize_shape
         self.coco = coco
         self.infos = coco.loadImgs(coco.getImgIds(catIds=coco.getCatIds(catNms=['person']))) # type: List[dict]
         self.seq = seq
+        self.path = path
     def __len__(self):
         return len(self.infos)
     def get_example(self, i):
@@ -44,7 +45,7 @@ class CamVid(dataset_mixin.DatasetMixin):
         return (img, mask)
 
 def load_img(coco, imgInfo: dict) -> Tuple[np.ndarray, np.ndarray]:
-    img = io.imread(imgInfo['coco_url'])
+    img = io.imread(self.path +imgInfo['file_name'])
     if img.ndim != 3:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
@@ -63,7 +64,8 @@ def load_img(coco, imgInfo: dict) -> Tuple[np.ndarray, np.ndarray]:
 
 def get_iter(resize_shape=None):
 
-    coco = COCO("./annotations/instances_train2014.json")
+    coco_train = COCO("./annotations/instances_train2014.json")
+    coco_val = COCO("./annotations/instances_val2014.json")
 
     seq = iaa.Sequential([
     #'''
@@ -81,4 +83,4 @@ def get_iter(resize_shape=None):
     #'''
     ]).to_deterministic() # type: iaa.Sequential
 
-    return CamVid(coco, seq, resize_shape), CamVid(coco, resize_shape)
+    return CamVid(coco_train, "train2014/", seq, resize_shape), CamVid(coco_val, "val2014/", resize_shape)

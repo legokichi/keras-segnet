@@ -75,6 +75,9 @@ if __name__ == '__main__':
     parser.add_argument("--initial_epoch", action='store', type=int, default=0, help='initial_epoch')
     parser.add_argument("--unet", action='store_true', help='use u-net')
     parser.add_argument("--coco", action='store_true', help='use mscoco dataset')
+    parser.add_argument("--ker_init", action='store', type=str, default="glorot_uniform", help='conv2D kernel initializer')
+    parser.add_argument("--lr", action='store', type=float, default=0.001, help='learning late')
+    parser.add_argument("--optimizer", action='store', type=str, default="adam", help='optimizer')
     args = parser.parse_args()
 
     if args.unet: resize_shape = (256, 256)
@@ -115,6 +118,10 @@ if __name__ == '__main__':
     if args.unet: name += "_unet"
     elif args.indices: name += "_indices"
     if args.coco: name += "_coco"
+    
+    name += "_" + args.optimizer
+    name += "_lr" + str(args.lr)
+    name += "_" + args.ker_init
 
     print("name: ", name)
 
@@ -125,16 +132,22 @@ if __name__ == '__main__':
         tensorflow_backend.set_session(session)
         tensorflow_backend.set_learning_phase(1)
 
-        if args.unet: segnet = create_unet((256, 256, 3), (256, 256, 2), 128)
-        else: n_classes = 12; segnet = create_segnet((480, 360, 3), n_classes, args.indices)
+        if args.unet:
+            loss_weights=None
+            segnet = create_unet((256, 256, 3), (256, 256, 2), filters=128, args.ker_init)
+        else:
+            loss_weights = None #[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
+            n_classes = 12
+            segnet = create_segnet((480, 360, 3), n_classes, args.indices, args.ker_init)
         
+        if args.optimizer == "nesterov": optimizer=SGD(lr=args.lr, momentum=0.9, decay=0.0005, nesterov=True)
+        else: optimizer=Adam(lr=args.lr, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0)
+
         segnet.compile(
-            optimizer=SGD(lr=0.001, momentum=0.9, decay=0.0005, nesterov=True),
-            #optimizer=Adam(lr=0.0001, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0),
-            #loss="mean_absolute_error", # l1 loss?
+            optimizer=optimizer,
             loss="categorical_crossentropy",
             metrics=['accuracy'],
-            #loss_weights=[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
+            loss_weights=loss_weights
         )
         if len(args.resume) > 0:
             segnet.load_weights(args.resume)
@@ -148,7 +161,7 @@ if __name__ == '__main__':
             verbose=1,
             #save_best_only=True,
             save_weights_only=True,
-            period=5,
+            period=1,
         ))
 
         callbacks.append(TensorBoard(

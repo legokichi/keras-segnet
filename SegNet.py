@@ -44,7 +44,7 @@ class DePool2D(UpSampling2D):
         ) * output
 
 
-def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tModel :
+def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool, ker_init=None) -> tModel :
     # base on https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/segnet_train.prototxt
     # and https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Example_Models/segnet_model_driving_webdemo.prototxt
 
@@ -69,36 +69,36 @@ def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tM
     # Block 5
     if indices: x = DePool2D(L[0], size=L[0].pool_size, input_shape=encoder.output_shape[1:])(x)
     else:       x = UpSampling2D(  size=L[0].pool_size, input_shape=encoder.output_shape[1:])(x)
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding, kernel_initializer="he_normal")(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[1].filters, L[1].kernel_size, padding=L[1].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[2].filters, L[2].kernel_size, padding=L[2].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[3].filters, L[3].kernel_size, padding=L[3].padding, kernel_initializer=ker_init)(x)))
     x = Dropout(0.5)(x)
     # Block 4
     if indices: x = DePool2D(L[4], size=L[4].pool_size)(x)
     else:       x = UpSampling2D(  size=L[4].pool_size)(x)
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer="he_normal")(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[5].filters, L[5].kernel_size, padding=L[5].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[6].filters, L[6].kernel_size, padding=L[6].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[7].filters, L[7].kernel_size, padding=L[7].padding, kernel_initializer=ker_init)(x)))
     x = Dropout(0.5)(x)
     # Block 3
     if indices: x = DePool2D(L[8], size=L[8].pool_size)(x)
     else:       x = UpSampling2D(  size=L[8].pool_size)(x)
     x = ZeroPadding2D(padding=(0, 1))(x)
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer="he_normal")(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[10].filters, L[10].kernel_size, padding=L[10].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[11].filters, L[11].kernel_size, padding=L[11].padding, kernel_initializer=ker_init)(x)))
     x = Dropout(0.5)(x)
     # Block 2
     if indices: x = DePool2D(L[12], size=L[12].pool_size)(x)
     else:       x = UpSampling2D(   size=L[12].pool_size)(x)
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding, kernel_initializer="he_normal")(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[13].filters, L[13].kernel_size, padding=L[13].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[14].filters, L[14].kernel_size, padding=L[14].padding, kernel_initializer=ker_init)(x)))
     # Block 1
     if indices: x = DePool2D(L[15], size=L[15].pool_size)(x)
     else:       x = UpSampling2D(   size=L[15].pool_size)(x)
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer="he_normal")(x)))
-    x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer="he_normal")(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[16].filters, L[16].kernel_size, padding=L[16].padding, kernel_initializer=ker_init)(x)))
+    x = Activation('relu')(BatchNormalization()(Conv2D(L[17].filters, L[17].kernel_size, padding=L[17].padding, kernel_initializer=ker_init)(x)))
 
-    x = Conv2D(nb_class, (1, 1), padding='valid', kernel_initializer="he_normal")(x)
+    x = Conv2D(nb_class, (1, 1), padding='valid', kernel_initializer=ker_init)(x)
 
     x = Activation('softmax')(x)
     
@@ -110,7 +110,7 @@ def create_segnet(shape: Tuple[int,int,int], nb_class: int, indices: bool) -> tM
 
 
 if __name__ == '__main__':
-    segnet = create_segnet((480, 360, 3), 12, indices=False)
+    segnet = create_segnet((480, 360, 3), 12, indices=False, ker_init="he_normal")
     segnet.summary()
     plot_model(segnet, to_file='segnet.png', show_shapes=True, show_layer_names=True)
     with open('segnet_model.json', 'w') as f: f.write(segnet.to_json())
