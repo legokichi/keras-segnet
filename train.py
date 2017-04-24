@@ -62,7 +62,7 @@ def dice_coef(y_true, y_pred):
     y_true = K.flatten(y_true)
     y_pred = K.flatten(y_pred)
     intersection = K.sum(y_true * y_pred)
-    return (2. * intersection + 1) / (K.sum(y_true) + K.sum(y_pred) + 1)
+    return (2. * intersection + 1.) / (K.sum(y_true) + K.sum(y_pred) + 1.)
 
 def dice_coef_loss(y_true, y_pred):
     return -dice_coef(y_true, y_pred)
@@ -78,6 +78,8 @@ if __name__ == '__main__':
     parser.add_argument("--ker_init", action='store', type=str, default="glorot_uniform", help='conv2D kernel initializer')
     parser.add_argument("--lr", action='store', type=float, default=0.001, help='learning late')
     parser.add_argument("--optimizer", action='store', type=str, default="adam", help='optimizer')
+    parser.add_argument("--loss", action='store', type=str, default="categorical_crossentropy", help='dice_coef|categorical_crossentropy')
+    
     args = parser.parse_args()
 
     if args.unet: resize_shape = (256, 256)
@@ -119,6 +121,7 @@ if __name__ == '__main__':
     elif args.indices: name += "_indices"
     if args.coco: name += "_coco"
     
+    name += "_" + args.loss
     name += "_" + args.optimizer
     name += "_lr" + str(args.lr)
     name += "_" + args.ker_init
@@ -140,13 +143,19 @@ if __name__ == '__main__':
             n_classes = 12
             segnet = create_segnet((480, 360, 3), n_classes, args.indices, args.ker_init)
         
-        if args.optimizer == "nesterov": optimizer=SGD(lr=args.lr, momentum=0.9, decay=0.0005, nesterov=True)
-        else: optimizer=Adam(lr=args.lr, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0)
+        if args.optimizer == "nesterov": optimizer = SGD(lr=args.lr, momentum=0.9, decay=0.0005, nesterov=True)
+        else: optimizer = Adam(lr=args.lr, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0)
+        if args.loss == "dice_coef_loss":
+            loss = dice_coef_loss
+            metrics = ['dice_coef']
+        else:
+            loss = "categorical_crossentropy"
+            metrics = ['accuracy']
 
         segnet.compile(
             optimizer=optimizer,
-            loss="categorical_crossentropy",
-            metrics=['accuracy'],
+            loss=loss,
+            metrics=metrics,
             loss_weights=loss_weights
         )
         if len(args.resume) > 0:
