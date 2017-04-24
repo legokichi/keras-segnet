@@ -79,6 +79,7 @@ if __name__ == '__main__':
     parser.add_argument("--lr", action='store', type=float, default=0.001, help='learning late')
     parser.add_argument("--optimizer", action='store', type=str, default="adam", help='adam|nesterov')
     parser.add_argument("--loss", action='store', type=str, default="categorical_crossentropy", help='dice_coef|categorical_crossentropy')
+    parser.add_argument("--filters", action='store', type=int, default=64, help='32|64|128')
     
     args = parser.parse_args()
 
@@ -121,6 +122,7 @@ if __name__ == '__main__':
     elif args.indices: name += "_indices"
     if args.coco: name += "_coco"
     
+    name += "_fil" + args.filters
     name += "_" + args.loss
     name += "_" + args.optimizer
     name += "_lr" + str(args.lr)
@@ -137,7 +139,7 @@ if __name__ == '__main__':
 
         if args.unet:
             loss_weights = None
-            segnet = create_unet((512, 512, 3), (512, 512, 2), 128, args.ker_init)
+            segnet = create_unet((512, 512, 3), (512, 512, 2), args.filters, args.ker_init)
         else:
             loss_weights = None #[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
             n_classes = 12

@@ -47,7 +47,7 @@ def create_unet(in_shape: Tuple[int,int,int], out_shape: Tuple[int,int,int], fil
 
 
 if __name__ == '__main__':
-    unet = create_unet((256, 256, 3), (256, 256, 3), 128, "he_normal")
+    unet = create_unet((512, 512, 3), (512, 512, 3), 64, "he_normal")
     unet.summary()
     plot_model(unet, to_file='unet.png', show_shapes=True, show_layer_names=True)
     
