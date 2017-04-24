@@ -49,7 +49,7 @@ class _CamVid(CamVid):
         mask[:,:,0] = _y[:,:,9] + _y[:,:,10] # Pedestrian + Bicyclist
         if self.resize_shape != None:
             _x = cv2.resize(_x, self.resize_shape)
-            _y = cv2.resize(_y, self.resize_shape)
+            mask = cv2.resize(mask, self.resize_shape)
         mask[:,:,0] = mask[:,:,0]>0
         return (_x, mask)
 

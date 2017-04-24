@@ -42,9 +42,9 @@ from chainer.iterators import MultiprocessIterator, SerialIterator
 sys.path.append("./chainer-segnet")
 from lib import CamVid
 
-from SegNet import create_segnet
-from unet import create_unet
-from CamVid import get_iter as get_camvid
+from model_segnet import create_segnet
+from model_unet import create_unet
+from camvid import get_iter as get_camvid
 from mscoco import get_iter as get_coco
 
 def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         tensorflow_backend.set_learning_phase(1)
 
         if args.unet:
-            loss_weights=None
+            loss_weights = None
             segnet = create_unet((512, 512, 3), (512, 512, 2), 128, args.ker_init)
         else:
             loss_weights = None #[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
