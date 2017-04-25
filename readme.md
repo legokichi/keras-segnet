@@ -38,7 +38,6 @@ mypy --ignore-missing-imports train.py
 
 ```
 python model_segnet.py
-python model_unet.py
 ```
 
 ## train
@@ -48,8 +47,8 @@ source download_camvid.sh
 source download_mscoco.sh
 env CUDA_VISIBLE_DEVICES=0 python train.py
 env CUDA_VISIBLE_DEVICES=1 python train.py --indices
-env CUDA_VISIBLE_DEVICES=0 python train.py --unet --coco
-env CUDA_VISIBLE_DEVICES=0 python train.py --unet --coco --ker_init=he_normal --lr=0.001 --optimizer=nesterov --loss=dice_coef
+env CUDA_VISIBLE_DEVICES=0 python train.py --coco
+env CUDA_VISIBLE_DEVICES=0 python train.py --coco --ker_init=he_normal --lr=0.001 --optimizer=nesterov
 tensorboard --port=8888 --logdir=log
 jupyter notebook --ip=0.0.0.0
 ```
@@ -68,10 +67,6 @@ env CUDA_VISIBLE_DEVICES=1 python train.py --initial_epoch=5 --resume=2017-04-17
 working in progress
 
 ## model
-### segnet
 
 ![segnet](https://raw.githubusercontent.com/legokichi/keras-segnet/master/segnet.png)
 
-### u-net
-
-![u-net](https://raw.githubusercontent.com/legokichi/keras-segnet/master/unet.png)
