@@ -39,8 +39,6 @@ import tensorflow as tf
 
 from chainer.iterators import MultiprocessIterator, SerialIterator
 
-sys.path.append("./chainer-segnet")
-from lib import CamVid
 
 from model_segnet import create_segnet
 from model_unet import create_unet
