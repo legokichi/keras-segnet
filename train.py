@@ -1,25 +1,16 @@
-from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized, Callable
-
-import cProfile
-import pstats
+from typing import Tuple, List, Text, Dict, Any, Iterator, Union, Sized, Callable, cast
 import argparse
-import time
-import random
 from datetime import datetime
 import sys
-
 sys.path.append("/usr/local/Cellar/opencv3/3.2.0/lib/python3.5/site-packages/") # mac opencv path
 import cv2
-
 import numpy as np
 np.random.seed(2017) # for reproducibility
-
 import os
 #os.environ['KERAS_BACKEND'] = 'theano'
 #os.environ["THEANO_FLAGS"] = "exception_verbosity=high,optimizer=None,device=cpu"
 #os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
 os.environ['KERAS_BACKEND'] = 'tensorflow'
-
 from keras.backend import set_image_data_format
 # keras.backend.backend()
 # keras.backend.set_epsilon(1e-07)
@@ -29,19 +20,15 @@ from keras.backend import set_image_data_format
 # set_image_data_format('channels_first') # theano
 set_image_data_format("channels_last")
 # keras.backend.image_data_format()
-
 from keras.models import model_from_json
 from keras.callbacks import ModelCheckpoint, Callback, TensorBoard
 from keras.optimizers import SGD, Adam
 from keras.backend import tensorflow_backend
 import keras.backend as K
-import tensorflow as tf
-
 from chainer.iterators import MultiprocessIterator, SerialIterator
 
 
 from model_segnet import create_segnet
-from model_unet import create_unet
 from camvid import get_iter as get_camvid
 from mscoco import get_iter as get_coco
 
@@ -54,40 +41,34 @@ def convert_to_keras_batch(iter: Iterator[List[Tuple[np.ndarray, np.ndarray]]]) 
         _ys = np.array(ys) # (n, 480, 360, n_classes)
         yield (_xs, _ys)
 
-
-
-def dice_coef(y_true, y_pred):
-    y_true = K.flatten(y_true)
-    y_pred = K.flatten(y_pred)
-    intersection = K.sum(y_true * y_pred)
-    return (2. * intersection + 1.) / (K.sum(y_true) + K.sum(y_pred) + 1.)
-
-def dice_coef_loss(y_true, y_pred):
-    return -dice_coef(y_true, y_pred)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SegNet trainer from CamVid')
     parser.add_argument("--indices", action='store_true', help='use indices pooling')
     parser.add_argument("--epochs",  action='store', type=int, default=1000, help='epochs')
     parser.add_argument("--resume",  action='store', type=str, default="", help='*_weights.hdf5')
     parser.add_argument("--initial_epoch", action='store', type=int, default=0, help='initial_epoch')
-    parser.add_argument("--unet", action='store_true', help='use u-net')
     parser.add_argument("--coco", action='store_true', help='use mscoco dataset')
     parser.add_argument("--ker_init", action='store', type=str, default="glorot_uniform", help='conv2D kernel initializer')
     parser.add_argument("--lr", action='store', type=float, default=0.001, help='learning late')
     parser.add_argument("--optimizer", action='store', type=str, default="adam", help='adam|nesterov')
-    parser.add_argument("--loss", action='store', type=str, default="categorical_crossentropy", help='dice_coef|categorical_crossentropy')
-    parser.add_argument("--filters", action='store', type=int, default=64, help='32|64|128')
     
-    args = parser.parse_args()
+    args = parser.parse_args() # type: argparse.Namespace
 
-    if args.unet: resize_shape = (512, 512)
-    else: resize_shape = None
+    name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+    if args.indices: name += "_indices"
+    if args.coco: name += "_coco"
+    name += "_" + args.loss
+    name += "_" + args.optimizer
+    name += "_lr" + str(args.lr)
+    name += "_" + args.ker_init
+
+    print("name: ", name)
 
     if args.coco:
-      train, valid = get_coco(resize_shape)
+      train, valid = get_coco() # type: Tuple[Iterator[np.ndarray], Iterator[np.ndarray]]
     else:
-      train, valid = get_camvid(resize_shape)
+      train, valid = get_camvid()
 
     train_iter = convert_to_keras_batch(
         #SerialIterator(
@@ -98,8 +79,7 @@ if __name__ == '__main__':
             n_prefetch=120,
             shared_mem=1000*1000*5
         )
-    )
-
+    ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
 
     valid_iter = convert_to_keras_batch(
         #SerialIterator(
@@ -114,43 +94,25 @@ if __name__ == '__main__':
         )
     ) # type: Iterator[Tuple[np.ndarray, np.ndarray]]
     
-    name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
-    if args.unet: name += "_unet"
-    elif args.indices: name += "_indices"
-    if args.coco: name += "_coco"
-    
-    name += "_fil" + str(args.filters)
-    name += "_" + args.loss
-    name += "_" + args.optimizer
-    name += "_lr" + str(args.lr)
-    name += "_" + args.ker_init
-
-    print("name: ", name)
-
     old_session = tensorflow_backend.get_session()
 
-    with tf.Graph().as_default():
-        session = tf.Session("")
+    with K.tf.Graph().as_default():
+        session = K.tf.Session("")
         tensorflow_backend.set_session(session)
         tensorflow_backend.set_learning_phase(1)
 
-        if args.unet:
-            loss_weights = None
-            segnet = create_unet((512, 512, 3), (512, 512, 2), args.filters, args.ker_init)
-        else:
-            loss_weights = None #[0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
-            n_classes = 12
-            segnet = create_segnet((480, 360, 3), n_classes, args.indices, args.ker_init)
+        loss_weights = None # type: List[float]
+        # [0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 9.6446, 1.8418, 0.6823, 6.2478, 7.3614], # https://github.com/alexgkendall/SegNet-Tutorial/blob/master/Models/bayesian_segnet_train.prototxt#L1615
+        n_classes = 12
+        segnet = create_segnet((480, 360, 3), n_classes, args.indices, args.ker_init)
         
-        if args.optimizer == "nesterov": optimizer = SGD(lr=args.lr, momentum=0.9, decay=0.0005, nesterov=True)
-        else: optimizer = Adam(lr=args.lr, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        if args.loss == "dice_coef_loss":
-            loss = dice_coef_loss
-            metrics = ['dice_coef']
+        if args.optimizer == "nesterov":
+            optimizer = SGD(lr=args.lr, momentum=0.9, decay=0.0005, nesterov=True)
         else:
-            loss = "categorical_crossentropy"
-            metrics = ['accuracy']
+            optimizer = Adam(lr=args.lr, beta_1=0.5, beta_2=0.999, epsilon=1e-08, decay=0.0)
+
+        loss = "categorical_crossentropy"
+        metrics = ['accuracy']
 
         segnet.compile(
             optimizer=optimizer,
@@ -168,7 +130,7 @@ if __name__ == '__main__':
         callbacks.append(ModelCheckpoint(
             name+"_weights.epoch{epoch:04d}-val_loss{val_loss:.2f}.hdf5",
             verbose=1,
-            #save_best_only=True,
+            save_best_only=True,
             save_weights_only=True,
             period=1,
         ))
@@ -182,7 +144,7 @@ if __name__ == '__main__':
 
         hist = segnet.fit_generator(
             generator=train_iter,
-            steps_per_epoch=len(train),
+            steps_per_epoch=len(cast(Sized, train)),
             epochs=args.epochs,
             verbose=1,
             callbacks=callbacks,
@@ -197,21 +159,12 @@ if __name__ == '__main__':
 
     tensorflow_backend.set_session(old_session)
 
-    print("entering repl (loop=False to exit)")
-    global loop
-    loop = True
-    while loop:
-        try:
-            exec(input("> "))
-        except:
-            print("Unexpected error:", sys.exc_info()[0])
-    print("finish")
+    exit()
 
 
-
-exit()
-
-
+import time
+import keras
+import SegNet
 def predict(model: Union[keras.engine.training.Model, None]):
     if model == None: 
         start = time.time()
@@ -295,13 +248,14 @@ def create_batch(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterat
 def create_valid(batch_size: int=8, nb_class: int=12, ignored: int=11) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
     return create_gen('./SegNet-Tutorial/CamVid/test.txt', batch_size, nb_class, ignored)
 
+import random
 def create_gen(filename: str, batch_size: int, nb_class: int, ignored: int) -> Iterator[Tuple[np.ndarray, np.ndarray]] :
     '''
     -> (float32, float32)
     '''
     with open(filename, 'r') as f:
         lines = f.readlines()
-    pairs = [tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1)) for line in lines] # type: List[Tuple[str, str]]
+    pairs = [cast(Tuple[str, str], tuple(line.strip().replace('/SegNet', './SegNet-Tutorial').split(' ', 1))) for line in lines] # type: List[Tuple[str, str]]
     while True:
         to_shuffle = pairs[:]
         random.shuffle(to_shuffle)
